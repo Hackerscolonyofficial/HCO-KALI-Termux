@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
-# HCO-KALI-Termux.sh (updated) — full installer with robust Termux:X11 detection
+# HCO-KALI-Termux.sh (updated with interactive Termux:X11 detection)
 # Author: Azhar | Hackers Colony
-# Usage: chmod +x HCO-KALI-Termux.sh && ./HCO-KALI-Termux.sh
+# Usage: chmod +x HCO-KALI-Termux.sh && ./HCO-KALI-Termux.sh [--debug]
 
 set -euo pipefail
+
+DEBUG=0
+if [[ "${1:-}" == "--debug" ]]; then
+  DEBUG=1
+  echo -e "\e[1;35m[DEBUG MODE ENABLED]\e[0m"
+fi
 
 # ---------- Config ----------
 YOUTUBE_URL="https://youtube.com/@hackers_colony_tech?si=pvdCWZggTIuGb0ya"
@@ -11,7 +17,6 @@ PREFERRED="kali"
 FALLBACK="debian"
 BOOTSTRAP_FLAG="${HOME}/.hco_kali_bootstrap_done"
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-# common known package names (order = preference)
 TERMUX_X11_CANDIDATES=( \
   "com.termux.x11" \
   "io.github.termux.x11" \
@@ -28,120 +33,65 @@ err(){ printf "\e[1;31m[ERR]\e[0m %s\n" "$*"; exit 1; }
 
 detect_arch(){ uname -m 2>/dev/null || echo "unknown"; }
 
-# Tries to find an installed package from the candidate list; prints package name or empty
-find_termux_x11_pkg(){
-  # If pm isn't available, return empty (caller will handle)
-  if ! command -v pm >/dev/null 2>&1; then
-    # On some minimal environments pm isn't in PATH. Try common locations (rare).
-    if [ -x "/system/bin/pm" ]; then
-      PATH="/system/bin:${PATH}"
-    elif [ -x "/vendor/bin/pm" ]; then
-      PATH="/vendor/bin:${PATH}"
-    else
-      # Debug hint for user
-      echo ""
-      return
-    fi
-  fi
-
-  # 1) Exact known candidates (fast)
-  for pkg in "${TERMUX_X11_CANDIDATES[@]}"; do
-    if pm list packages 2>/dev/null | tr '[:upper:]' '[:lower:]' | grep -qi "^package:${pkg}$"; then
-      echo "$pkg"
-      return
-    fi
-  done
-
-  # 2) Loose exact-match: any package name containing termux and x11 (in any order)
-  candidate=$(pm list packages 2>/dev/null | tr '[:upper:]' '[:lower:]' \
-    | grep -Eo 'package:[a-z0-9._-]*termux[a-z0-9._-]*x11[a-z0-9._-]*' \
-    | head -n1 | sed 's/package://')
-  if [ -n "$candidate" ]; then
-    echo "$candidate"
-    return
-  fi
-
-  # 3) Search by 'x11' first (some builds name it differently)
-  candidate=$(pm list packages 2>/dev/null | tr '[:upper:]' '[:lower:]' | grep -i 'x11' | sed 's/package://g' | head -n1)
-  if [ -n "$candidate" ]; then
-    echo "$candidate"
-    return
-  fi
-
-  # 4) Search by packages mentioning 'termux' and return something sensible
-  candidate=$(pm list packages 2>/dev/null | tr '[:upper:]' '[:lower:]' | grep -i 'termux' | head -n1 | sed 's/package://')
-  if [ -n "$candidate" ]; then
-    # but prefer ones that look like x11; otherwise return the first termux package (last resort)
-    if echo "$candidate" | grep -qi 'x11'; then
-      echo "$candidate"
-      return
-    else
-      # last resort: return the first 'termux' package (useful if user's package is weird)
-      echo "$candidate"
-      return
-    fi
-  fi
-
-  # nothing found
-  echo ""
-}
-
-# Try to launch an Android package in multiple ways; returns 0 on success, non-zero on failure.
+# Try to launch an Android package in multiple ways; returns 0 on success
 launch_android_pkg(){
   pkgname="$1"
   if [ -z "$pkgname" ]; then
     return 1
   fi
 
-  # If am exists, try a list of likely activities and forms
-  if command -v am >/dev/null 2>&1; then
-    # try a bunch of likely activity names (most distributions use .MainActivity or .TermuxActivity)
-    activities=(
-      ".MainActivity"
-      ".LauncherActivity"
-      ".TermuxActivity"
-      ".StartActivity"
-      ".Main"
-      "/.MainActivity"
-      "/.LauncherActivity"
-      ""
-    )
+  [[ "$DEBUG" -eq 1 ]] && echo "[DEBUG] Trying to launch Android package: $pkgname"
 
+  if command -v am >/dev/null 2>&1; then
+    # list of likely activities / attempts
+    activities=(
+      ".MainActivity" ".LauncherActivity" ".TermuxActivity" ".StartActivity" ".Main" "" )
     for a in "${activities[@]}"; do
       if [ -n "$a" ]; then
-        # try explicit component if activity looks like '/.Name' or '.Name'
+        # try explicit component
         if am start -a android.intent.action.MAIN -n "${pkgname}${a}" >/dev/null 2>&1; then
+          [[ "$DEBUG" -eq 1 ]] && echo "[DEBUG] Launched activity: ${pkgname}${a}"
+          return 0
+        fi
+        # try VIEW intent to package component
+        if am start -a android.intent.action.VIEW -n "${pkgname}${a}" >/dev/null 2>&1; then
+          [[ "$DEBUG" -eq 1 ]] && echo "[DEBUG] Launched VIEW activity: ${pkgname}${a}"
           return 0
         fi
       else
-        # try generic package-level MAIN intent
+        # generic package-level MAIN intent
         if am start -a android.intent.action.MAIN -p "${pkgname}" >/dev/null 2>&1; then
+          [[ "$DEBUG" -eq 1 ]] && echo "[DEBUG] Launched package MAIN intent: $pkgname"
           return 0
         fi
       fi
     done
 
-    # Try opening the package's main view (play store / view intent); some apps accept VIEW intent with their deep link
+    # Try opening market/play view
     if am start -a android.intent.action.VIEW -d "market://details?id=${pkgname}" >/dev/null 2>&1; then
+      [[ "$DEBUG" -eq 1 ]] && echo "[DEBUG] Opened market page for $pkgname"
+      return 0
+    fi
+    # try general view with https fallback
+    if am start -a android.intent.action.VIEW -d "https://play.google.com/store/apps/details?id=${pkgname}" >/dev/null 2>&1; then
+      [[ "$DEBUG" -eq 1 ]] && echo "[DEBUG] Opened Play URL for $pkgname"
       return 0
     fi
   fi
 
-  # monkey is often able to start the app even when activity names are unknown
+  # monkey fallback
   if command -v monkey >/dev/null 2>&1; then
     if monkey -p "$pkgname" 1 >/dev/null 2>&1; then
+      [[ "$DEBUG" -eq 1 ]] && echo "[DEBUG] Launched package via monkey: $pkgname"
       return 0
     fi
   fi
 
-  # As a last effort, try opening Play/GitHub releases page so user can tap/open manually
+  # termux-open-url fallback to Play/GitHub releases
   if command -v termux-open-url >/dev/null 2>&1; then
     termux-open-url "https://play.google.com/store/apps/details?id=${pkgname}" >/dev/null 2>&1 || true
-  elif command -v am >/dev/null 2>&1; then
-    am start -a android.intent.action.VIEW -d "https://play.google.com/store/apps/details?id=${pkgname}" >/dev/null 2>&1 || true
   fi
 
-  # give caller a failure code
   return 2
 }
 
@@ -151,13 +101,11 @@ echo -e "\e[1;33m🔒 TOOL LOCKED — HCO-KALI-Termux\e[0m"
 echo "To continue please subscribe to Hackers Colony Tech on YouTube and click the bell."
 echo -n "Redirecting to YouTube in "
 for i in 9 8 7 6 5 4 3 2 1; do
-  # cycle colors a bit
   printf "\e[38;5;$((160 + (i*2) % 80))m%s \e[0m" "$i"
   sleep 1
 done
 echo
 
-# open YouTube if possible
 if command -v termux-open-url >/dev/null 2>&1; then
   termux-open-url "$YOUTUBE_URL" >/dev/null 2>&1 || true
 elif command -v am >/dev/null 2>&1; then
@@ -166,7 +114,7 @@ else
   echo "Open this URL manually: $YOUTUBE_URL"
 fi
 
-read -r -p $'\nPress ENTER when you are back in Termux to continue: '
+read -r -p $'\nPress ENTER when back in Termux to continue: '
 
 # ---------- Ensure prerequisites ----------
 info "Updating packages and ensuring proot-distro is installed..."
@@ -326,37 +274,77 @@ MSG
   exit 0
 fi
 
-# ---------- Attempt to locate and launch Termux:X11 Android app ----------
+# ---------- Interactive detection & launch ----------
 info "User agreed. Detecting Termux:X11 package..."
-TERMUX_X11_PKG=""
-TERMUX_X11_PKG="$(find_termux_x11_pkg || true)"
 
-if [ -n "${TERMUX_X11_PKG}" ]; then
-  info "Termux:X11 package detected: ${TERMUX_X11_PKG}"
-  info "Attempting to launch Termux:X11..."
-  if launch_android_pkg "${TERMUX_X11_PKG}"; then
-    info "Launched Termux:X11 (or handed control to system)."
-  else
-    warn "Could not auto-launch Termux:X11 via intents/monkey; please open it manually."
-  fi
-else
-  warn "Termux:X11 app not found on device by known package names."
-
-  # Try to provide helpful hints: search for any package with x11 in the name and show first few results
-  if command -v pm >/dev/null 2>&1; then
-    info "Debug: listing packages that mention 'x11' or 'termux' (first 12 lines):"
-    pm list packages 2>/dev/null | tr '[:upper:]' '[:lower:]' | grep -iE "x11|termux" | head -n 12 || true
-  else
-    warn "pm command not available in PATH; can't search installed packages."
-  fi
-
-  # Try to open Termux:X11 GitHub releases page (so user can install)
+# If pm isn't available, we can't list packages — warn and fallback to open GitHub releases
+if ! command -v pm >/dev/null 2>&1; then
+  warn "pm command not available in PATH. Can't enumerate installed packages."
   if command -v termux-open-url >/dev/null 2>&1; then
     termux-open-url "https://github.com/termux/termux-x11/releases" >/dev/null 2>&1 || true
   elif command -v am >/dev/null 2>&1; then
     am start -a android.intent.action.VIEW -d "https://github.com/termux/termux-x11/releases" >/dev/null 2>&1 || true
   fi
-  warn "After installing Termux:X11, run: ${START_WRAPPER}"
+  warn "Install Termux:X11 and then run: ${START_WRAPPER}"
+  exit 0
+fi
+
+# Gather candidate packages mentioning termux/x11
+mapfile -t candidates < <(pm list packages 2>/dev/null | tr '[:upper:]' '[:lower:]' | grep -iE 'x11|termux' | sed 's/package://g' || true)
+
+if [ "${#candidates[@]}" -eq 0 ]; then
+  warn "No installed packages containing 'termux' or 'x11' found."
+  if command -v termux-open-url >/dev/null 2>&1; then
+    termux-open-url "https://github.com/termux/termux-x11/releases" >/dev/null 2>&1 || true
+  elif command -v am >/dev/null 2>&1; then
+    am start -a android.intent.action.VIEW -d "https://github.com/termux/termux-x11/releases" >/dev/null 2>&1 || true
+  fi
+  warn "Please install Termux:X11 and re-run this script."
+  exit 1
+fi
+
+if [ "$DEBUG" -eq 1 ]; then
+  info "Debug: Found the following packages mentioning 'x11' or 'termux':"
+  for p in "${candidates[@]}"; do
+    echo " - $p"
+  done
+fi
+
+# Try to auto-detect the most likely Termux:X11 package (first package containing 'x11')
+TERMUX_X11_PKG=""
+for p in "${candidates[@]}"; do
+  if [[ "$p" =~ x11 ]]; then
+    TERMUX_X11_PKG="$p"
+    [[ "$DEBUG" -eq 1 ]] && echo "[DEBUG] Auto-detected x11 candidate: $TERMUX_X11_PKG"
+    break
+  fi
+done
+
+# If still empty (no 'x11'), offer the user a selection from candidates
+if [ -z "$TERMUX_X11_PKG" ]; then
+  echo -e "\nMultiple candidate packages found. Please pick the Termux:X11 package to launch (enter number):"
+  PS3="Select package number: "
+  select pkg_choice in "${candidates[@]}"; do
+    if [ -n "$pkg_choice" ]; then
+      TERMUX_X11_PKG="$pkg_choice"
+      break
+    else
+      echo "Invalid selection. Try again."
+    fi
+  done
+fi
+
+info "Using Termux:X11 package: ${TERMUX_X11_PKG}"
+if launch_android_pkg "${TERMUX_X11_PKG}"; then
+  info "Launched Termux:X11 (or handed control to system)."
+else
+  warn "Could not auto-launch Termux:X11 via intents/monkey; please open it manually."
+  warn "After installing or opening Termux:X11, run: ${START_WRAPPER}"
+  # show a short sample of candidates for debugging
+  if [ "$DEBUG" -eq 1 ]; then
+    echo "[DEBUG] Candidate list (first 12):"
+    for ((i=0;i<${#candidates[@]} && i<12;i++)); do echo " - ${candidates[$i]}"; done
+  fi
   exit 0
 fi
 
