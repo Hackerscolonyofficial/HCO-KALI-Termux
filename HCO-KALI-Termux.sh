@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# HCO-KALI-Termux.sh (robust Termux:X11 detection)
+# HCO-KALI-Termux.sh — fully fixed & retry-enabled
 # Author: Azhar | Hackers Colony
 # Usage: chmod +x HCO-KALI-Termux.sh && ./HCO-KALI-Termux.sh
 
 set -euo pipefail
-
-DEBUG=1  # set to 1 for extra debug output
+DEBUG=1  # set to 1 for debug output
 
 # ---------- Config ----------
 YOUTUBE_URL="https://youtube.com/@hackers_colony_tech?si=pvdCWZggTIuGb0ya"
@@ -26,66 +25,7 @@ info(){ printf "\e[1;36m[INFO]\e[0m %s\n" "$*"; }
 warn(){ printf "\e[1;33m[WARN]\e[0m %s\n" "$*"; }
 err(){ printf "\e[1;31m[ERR]\e[0m %s\n" "$*"; exit 1; }
 
-# ---------- Detect Termux:X11 package ----------
-detect_termux_x11_pkg(){
-  # First try pm if available
-  if command -v pm >/dev/null 2>&1; then
-    local candidate
-    for pkg in "${TERMUX_X11_CANDIDATES[@]}"; do
-      if pm list packages 2>/dev/null | grep -qi "package:${pkg}"; then
-        echo "$pkg"
-        return 0
-      fi
-    done
-    # Looser matching: any package containing 'termux' and 'x11'
-    candidate=$(pm list packages 2>/dev/null | tr '[:upper:]' '[:lower:]' | grep -Eo 'package:[a-z0-9.-]*termux[a-z0-9.-]*x11[a-z0-9._-]*' | head -n1 | sed 's/package://')
-    if [ -n "$candidate" ]; then
-      echo "$candidate"
-      return 0
-    fi
-  fi
-
-  # Next, try common known package names (F-Droid/Play)
-  for pkg in "${TERMUX_X11_CANDIDATES[@]}"; do
-    echo "$pkg"  # just assume it is installed
-    return 0
-  done
-
-  # If still nothing, ask user
-  read -r -p "Enter the Termux:X11 package name installed on your device: " pkgname
-  echo "$pkgname"
-  return 0
-}
-
-# ---------- Launch Android package ----------
-launch_android_pkg(){
-  local pkgname="$1"
-  [[ -z "$pkgname" ]] && return 1
-
-  local activities=(".MainActivity" ".LauncherActivity" ".TermuxActivity" ".StartActivity" "")
-  for a in "${activities[@]}"; do
-    if [ -n "$a" ] && am start -a android.intent.action.MAIN -n "${pkgname}${a}" >/dev/null 2>&1; then
-      [[ $DEBUG -eq 1 ]] && echo "[DEBUG] Launched activity: ${pkgname}${a}"
-      return 0
-    fi
-  done
-
-  if am start -a android.intent.action.MAIN -p "$pkgname" >/dev/null 2>&1; then
-    [[ $DEBUG -eq 1 ]] && echo "[DEBUG] Launched package: $pkgname"
-    return 0
-  fi
-
-  if command -v monkey >/dev/null 2>&1; then
-    monkey -p "$pkgname" 1 >/dev/null 2>&1 && return 0
-  fi
-
-  if command -v termux-open-url >/dev/null 2>&1; then
-    termux-open-url "https://play.google.com/store/apps/details?id=${pkgname}" >/dev/null 2>&1 || true
-  fi
-  return 2
-}
-
-# ---------- YouTube redirect ----------
+# ---------- Unlock & YouTube redirect ----------
 clear
 echo -e "\e[1;33m🔒 TOOL LOCKED — HCO-KALI-Termux\e[0m"
 echo "Subscribe to Hackers Colony Tech on YouTube and click the bell."
@@ -140,14 +80,19 @@ fi
 
 # ---------- Install distro ----------
 DIST="$PREFERRED"
-set +e
-proot-distro install "${PREFERRED}" >/dev/null 2>&1
-if [ $? -ne 0 ]; then
-  warn "Could not install ${PREFERRED}, using fallback ${FALLBACK}"
-  DIST="$FALLBACK"
-  proot-distro install "${FALLBACK}" || err "Fallback failed."
+if ! proot-distro list | grep -qi "^$DIST"; then
+  info "Installing distro $DIST..."
+  echo "y" | proot-distro install "$DIST" >/dev/null 2>&1 || warn "Install finished with warnings."
+else
+  info "Distro $DIST already installed."
 fi
-set -e
+
+# fallback if preferred fails
+if ! proot-distro list | grep -qi "^$DIST"; then
+  DIST="$FALLBACK"
+  info "Installing fallback $DIST..."
+  echo "y" | proot-distro install "$DIST" >/dev/null 2>&1 || err "Fallback install failed."
+fi
 info "Using distro: $DIST"
 
 # ---------- Bootstrap XFCE ----------
@@ -195,13 +140,54 @@ proot-distro login "$DISTRO" -- bash -lc "export DISPLAY=:0; sudo -u termuxuser 
 EOS
 chmod +x "$START_WRAPPER"
 
-# ---------- Launch Termux:X11 ----------
-info "Detecting Termux:X11 package..."
-TERMUX_X11_PKG=$(detect_termux_x11_pkg)
-info "Launching Termux:X11 ($TERMUX_X11_PKG)..."
-launch_android_pkg "$TERMUX_X11_PKG" || warn "Could not auto-launch; open it manually."
+# ---------- Robust Termux:X11 detection & launch with retry ----------
+while true; do
+  info "Detecting Termux:X11 package..."
+  TERMUX_X11_PKG=$(pm list packages 2>/dev/null | tr '[:upper:]' '[:lower:]' | grep -E 'termux.*x11' | head -n1 | sed 's/package://')
+  if [ -z "$TERMUX_X11_PKG" ]; then
+    for pkg in "${TERMUX_X11_CANDIDATES[@]}"; do
+      if pm list packages 2>/dev/null | grep -qi "$pkg"; then
+        TERMUX_X11_PKG="$pkg"
+        break
+      fi
+    done
+  fi
+
+  if [ -n "$TERMUX_X11_PKG" ]; then
+    info "Termux:X11 package found: $TERMUX_X11_PKG"
+    break
+  fi
+
+  warn "Termux:X11 not found on device."
+  read -r -p "Did you install Termux:X11? Press ENTER to retry or Ctrl+C to exit..." _
+done
+
+# Try launching Termux:X11
+launched=0
+for activity in ".MainActivity" ".LauncherActivity" ".TermuxActivity" ".StartActivity" ""; do
+  if [ -n "$activity" ] && am start -a android.intent.action.MAIN -n "${TERMUX_X11_PKG}${activity}" >/dev/null 2>&1; then
+    info "Launched Termux:X11 activity: ${TERMUX_X11_PKG}${activity}"
+    launched=1
+    break
+  fi
+done
+
+if [ $launched -eq 0 ] && am start -a android.intent.action.MAIN -p "$TERMUX_X11_PKG" >/dev/null 2>&1; then
+  info "Launched Termux:X11 package: $TERMUX_X11_PKG"
+  launched=1
+fi
+
+if [ $launched -eq 0 ] && command -v monkey >/dev/null 2>&1; then
+  monkey -p "$TERMUX_X11_PKG" 1 >/dev/null 2>&1 && launched=1 && info "Launched Termux:X11 via monkey"
+fi
+
+if [ $launched -eq 0 ]; then
+  warn "Could not auto-launch Termux:X11. Opening GitHub releases page..."
+  termux-open-url "https://github.com/termux/termux-x11/releases" >/dev/null 2>&1 || true
+fi
 
 sleep 4
 info "Starting XFCE desktop..."
 bash "$START_WRAPPER"
+
 info "Done — HCO-KALI-Termux by Azhar"
