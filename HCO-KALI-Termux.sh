@@ -1,17 +1,11 @@
 #!/usr/bin/env bash
-# HCO-KALI-Termux.sh — single-file installer (no-root) with auto-start and bVNC auto-launch
+# HCO-KALI-Termux.sh — installer (no-root) with auto VNC password, auto IP detect, and bVNC auto-open
 # Author: Azhar | Hackers Colony
-# Description:
-#  - Unlock flow (subscribe & bell) + redirect to your YouTube channel
-#  - Installs Kali (proot-distro) in Termux and bootstraps XFCE + TigerVNC
-#  - Auto-starts the GUI after install, detects screen size for VNC geometry
-#  - Auto-launches bVNC (if installed) or opens its Play Store page
-#
 # Usage: chmod +x HCO-KALI-Termux.sh && bash HCO-KALI-Termux.sh
 set -euo pipefail
 
 # -------------------------
-# Config - edit if needed
+# Config
 # -------------------------
 YOUTUBE_URL="https://youtube.com/@hackers_colony_tech?si=pvdCWZggTIuGb0ya"
 DIST_NAME="kali-rolling"
@@ -23,11 +17,10 @@ LOGPREFIX="[HCO-KALI-Termux]"
 BVNC_PKG="com.iiordanov.bVNC"
 BVNC_MARKET_URI="market://details?id=${BVNC_PKG}"
 BVNC_WEB_URL="https://play.google.com/store/apps/details?id=${BVNC_PKG}"
-VNC_HOST="127.0.0.1"
 VNC_DISPLAY=":1"
 VNC_PORT=5901
 
-# ANSI colors
+# Colors
 RED_BG="\033[41m"
 GREEN_BOLD="\033[1;32m"
 BOLD="\033[1m"
@@ -40,21 +33,18 @@ warn(){ printf "%b %s\\n" "$LOGPREFIX" "$*"; }
 err(){ printf "%b %s\\n" "$LOGPREFIX" "$*"; exit 1; }
 
 # -------------------------
-# Helper: detect screen resolution using 'wm size'
+# Helpers
 # -------------------------
 detect_geometry(){
-  # Try wm size -> "Physical size: 1080x2340"
-  GEOM="1280x720"   # default fallback
+  GEOM="1280x720"
   if command -v wm >/dev/null 2>&1; then
     out=$(wm size 2>/dev/null || true)
     if [[ $out =~ ([0-9]{3,4}x[0-9]{3,4}) ]]; then
       GEOM="${BASH_REMATCH[1]}"
     fi
   fi
-  # sanitize: ensure width and height numbers, cap to reasonable max
   if [[ $GEOM =~ ^([0-9]+)x([0-9]+)$ ]]; then
     W=${BASH_REMATCH[1]}; H=${BASH_REMATCH[2]}
-    # Cap to 1920x1080 for performance on many phones
     if [ "$W" -gt 1920 ]; then W=1920; fi
     if [ "$H" -gt 1080 ]; then H=1080; fi
     GEOM="${W}x${H}"
@@ -64,19 +54,33 @@ detect_geometry(){
   printf "%s" "$GEOM"
 }
 
+# Determine best local host IP to use for external connections (falls back to 127.0.0.1)
+detect_host_ip(){
+  ip=""
+  # Try ip route to get default interface IP
+  if command -v ip >/dev/null 2>&1; then
+    ip=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {for(i=1;i<=NF;i++){if($i=="src"){print $(i+1); exit}}}')
+  fi
+  # try hostname -I
+  if [ -z "$ip" ] && command -v hostname >/dev/null 2>&1; then
+    ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+  fi
+  # fallback
+  if [ -z "$ip" ]; then ip="127.0.0.1"; fi
+  printf "%s" "$ip"
+}
+
 # -------------------------
-# Unlock flow (subscribe + redirect to YouTube)
+# Unlock flow (subscribe + redirect)
 # -------------------------
 clear
 printf "%b\n\n" "${BOLD}🔒 TOOL LOCKED — HCO-KALI-Termux${RESET}"
 printf "To unlock this tool and continue you must:\n"
-printf "  1) Subscribe to the Hackers Colony Tech YouTube channel\n"
+printf "  1) Subscribe to Hackers Colony Tech YouTube channel\n"
 printf "  2) Click the bell icon to support the channel\n\n"
 printf "%b\n" "${YELLOW}Redirecting to YouTube app in...${RESET}"
 
-# Colorful countdown 9->1
-colors=( "\033[1;31m" "\033[1;33m" "\033[1;32m" "\033[1;36m" "\033[1;35m" "\033[1;34m" \
-         "\033[38;5;208m" "\033[38;5;202m" "\033[38;5;201m" )
+colors=( "\033[1;31m" "\033[1;33m" "\033[1;32m" "\033[1;36m" "\033[1;35m" "\033[1;34m" "\033[38;5;208m" "\033[38;5;202m" "\033[38;5;201m" )
 count=9
 while [ $count -ge 1 ]; do
   col="${colors[$(( (9-count) % ${#colors[@]} ))]}"
@@ -86,26 +90,19 @@ while [ $count -ge 1 ]; do
 done
 printf "\n\n"
 
-# Try to open the YouTube URL
 OPENED=0
 if command -v termux-open-url >/dev/null 2>&1; then
   termux-open-url "$YOUTUBE_URL" >/dev/null 2>&1 || true
   OPENED=1
 fi
-
-if [ $OPENED -eq 0 ]; then
-  if command -v am >/dev/null 2>&1; then
-    am start -a android.intent.action.VIEW -d "$YOUTUBE_URL" >/dev/null 2>&1 || true
-    OPENED=1
-  fi
+if [ $OPENED -eq 0 ] && command -v am >/dev/null 2>&1; then
+  am start -a android.intent.action.VIEW -d "$YOUTUBE_URL" >/dev/null 2>&1 || true
+  OPENED=1
 fi
 
 printf "%b\n" "${CYAN}Opened YouTube (if available). Please subscribe & click the bell. When done, return to Termux and press ENTER to continue.${RESET}"
 read -r -p $'\nPress ENTER when you are back in Termux to proceed with installation: '
 
-# -------------------------
-# Show title banner
-# -------------------------
 TITLE="HCO Kali Termux by Azhar"
 BAR_WIDTH=60
 pad_total=$(( BAR_WIDTH - ${#TITLE} ))
@@ -118,9 +115,6 @@ printf "%b%s%b" "${GREEN_BOLD}" "${TITLE}" "${RESET}${RED_BG}"
 printf "%*s" $pad_right " "
 printf "%b\n\n" "${RESET}"
 
-# -------------------------
-# Confirm to proceed
-# -------------------------
 read -r -p "Proceed to install Kali (no-root) inside Termux? [Y/n]: " PROCEED
 PROCEED="${PROCEED:-Y}"
 if [[ ! "$PROCEED" =~ ^([yY]|[yY][eE][sS])$ ]]; then
@@ -128,119 +122,112 @@ if [[ ! "$PROCEED" =~ ^([yY]|[yY][eE][sS])$ ]]; then
   exit 0
 fi
 
-# -------------------------
+# Ask for VNC password (or auto-generate)
+read -r -p "Enter VNC password to set for Kali (6-16 chars) [leave empty to auto-generate]: " VNC_PASS
+if [ -z "${VNC_PASS}" ]; then
+  if command -v openssl >/dev/null 2>&1; then
+    VNC_PASS=$(openssl rand -hex 5) # 10 hex chars ~ decent for lab
+  else
+    VNC_PASS=$(date +%s | sha256sum | head -c 10)
+  fi
+  info "Auto-generated VNC password: $VNC_PASS"
+else
+  info "Using provided VNC password (hidden)."
+fi
+
 # Prepare directories
-# -------------------------
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$START_DIR"
 
-# -------------------------
-# Install Termux prerequisites
-# -------------------------
+# Install prerequisites
 info "Updating Termux packages and installing prerequisites..."
 pkg update -y || warn "pkg update failed; continuing"
 pkg upgrade -y || warn "pkg upgrade failed; continuing"
-pkg install -y proot-distro pulseaudio tigervnc openssh curl wget proot pulseaudio-utils termux-exec git python || true
+pkg install -y proot-distro pulseaudio tigervnc openssh curl wget proot pulseaudio-utils termux-exec git python openssl || true
 
 if ! command -v proot-distro >/dev/null 2>&1; then
-  err "proot-distro not installed. Please ensure you run this in Termux and have network access."
+  err "proot-distro not available. Run this in Termux with network access."
 fi
 
-# -------------------------
-# Install Kali rootfs (if missing)
-# -------------------------
+# Install Kali if missing
 if proot-distro list | grep -qi "$DIST_NAME"; then
-  info "Kali distro '$DIST_NAME' already registered in proot-distro."
+  info "Kali distro '$DIST_NAME' already registered."
 else
-  info "Installing Kali rootfs via proot-distro (may download multiple GB). Please be patient..."
-  proot-distro install "$DIST_NAME" || err "proot-distro install failed. Check your connection and storage."
+  info "Installing Kali rootfs via proot-distro (may download many MBs/GBs). Be patient..."
+  proot-distro install "$DIST_NAME" || err "proot-distro install failed. Check storage/network."
 fi
 
-# -------------------------
-# Create bootstrap script that will run inside Kali
-# -------------------------
-info "Preparing Kali bootstrap script (inside distro)."
+# Create bootstrap for Kali
+info "Preparing Kali bootstrap script..."
 cat > "$BOOTSTRAP" <<'EO_BOOT'
 #!/usr/bin/env bash
 set -e
 export DEBIAN_FRONTEND=noninteractive
 apt update -y || true
 apt upgrade -y || true
-
-# Install lightweight XFCE + VNC and utilities
 apt install -y xfce4 xfce4-goodies dbus-x11 tigervnc-standalone-server tigervnc-common sudo x11-utils xterm wget nano || true
-
-# Create basic user 'termuxuser' if not exists
+# Create user
 if ! id -u termuxuser >/dev/null 2>&1; then
   useradd -m -s /bin/bash termuxuser || true
   echo "termuxuser:termux" | chpasswd || true
   usermod -aG sudo termuxuser || true
 fi
-
-# Setup VNC xstartup for the user
+# Setup xstartup
 USER_HOME=/home/termuxuser
 mkdir -p $USER_HOME/.vnc
 cat > $USER_HOME/.vnc/xstartup <<'XSU'
 #!/bin/sh
-# Start dbus and XFCE session
 [ -x /etc/X11/Xsession ] && exec /etc/X11/Xsession
 startxfce4 &
 XSU
 chown -R termuxuser:termuxuser $USER_HOME/.vnc || true
 chmod +x $USER_HOME/.vnc/xstartup || true
-
-# Clean up
 apt autoremove -y || true
 apt clean || true
-
 echo "BOOTSTRAP_DONE"
 EO_BOOT
 
 chmod +x "$BOOTSTRAP"
 
-# -------------------------
 # Run bootstrap inside Kali
-# -------------------------
-info "Executing bootstrap inside Kali (this will take some time)..."
-# Pipe bootstrap into proot-distro login for reliable execution
-proot-distro login "$DIST_NAME" -- bash -s < "$BOOTSTRAP" || warn "Bootstrap finished with warnings."
+info "Running bootstrap inside Kali (this can take a while)..."
+proot-distro login "$DIST_NAME" -- bash -s < "$BOOTSTRAP" || warn "Bootstrap completed with warnings."
 
-# Ensure home directory ownership for termuxuser
+# Ensure ownership
 proot-distro login "$DIST_NAME" -- bash -lc "chown -R termuxuser:termuxuser /home/termuxuser || true"
 
-# -------------------------
-# Determine geometry for VNC (detect screen)
-# -------------------------
+# Set VNC password inside Kali for termuxuser
+info "Setting VNC password inside Kali for user 'termuxuser'..."
+# We pass the VNC_PASS in an environment variable to the inner shell; use printf to feed vncpasswd
+# Note: vncpasswd writes binary file to /home/termuxuser/.vnc/passwd
+proot-distro login "$DIST_NAME" -- bash -lc "export VNC_PASS='${VNC_PASS}'; mkdir -p /home/termuxuser/.vnc; printf '%s\n%s\n' \"\$VNC_PASS\" \"\$VNC_PASS\" | sudo -u termuxuser vncpasswd -f > /home/termuxuser/.vnc/passwd && chmod 600 /home/termuxuser/.vnc/passwd && chown termuxuser:termuxuser /home/termuxuser/.vnc/passwd || true"
+# Note: 'vncpasswd -f' writes the hashed password to stdout; we redirected it to the passwd file.
+
+# Determine geometry
 GEOM=$(detect_geometry)
 info "Using VNC geometry: $GEOM"
 
-# -------------------------
-# Create start/stop helper scripts using detected geometry
-# -------------------------
-info "Creating start/stop helper scripts in $START_DIR ..."
+# Create start/stop scripts (use password)
+info "Creating start/stop helper scripts..."
 cat > "$START_DIR/start-kali.sh" <<EO_START
 #!/usr/bin/env bash
-# Start PulseAudio in Termux (for sound)
 pulseaudio --start --exit-idle-time=-1 >/dev/null 2>&1 || true
-# Start VNC server inside Kali for user 'termuxuser' on :1 (5901) with geometry $GEOM
-proot-distro login "$DIST_NAME" -- bash -lc "export HOME=/home/termuxuser; sudo -u termuxuser sh -c 'vncserver $VNC_DISPLAY -geometry $GEOM -depth 24 -localhost no -SecurityTypes None || true' "
-echo "Kali XFCE VNC should be on ${VNC_HOST}:${VNC_PORT} (display $VNC_DISPLAY). Connect with a VNC client."
+# Start VNC server inside Kali as termuxuser with password already set
+proot-distro login "$DIST_NAME" -- bash -lc "export HOME=/home/termuxuser; sudo -u termuxuser sh -c 'vncserver $VNC_DISPLAY -geometry $GEOM -depth 24 -localhost no || true' "
+echo "Started Kali VNC on display $VNC_DISPLAY (port $VNC_PORT)"
 EO_START
 chmod +x "$START_DIR/start-kali.sh"
 
 cat > "$START_DIR/stop-kali.sh" <<'EO_STOP'
 #!/usr/bin/env bash
-# Stop VNC inside Kali and PulseAudio on Termux
 proot-distro login "'"$DIST_NAME"'" -- bash -lc "sudo -u termuxuser sh -c 'vncserver -kill :1 || true' "
 pulseaudio --kill >/dev/null 2>&1 || true
-echo "Stopped Kali VNC (if it was running)."
+echo "Stopped Kali VNC (if running)"
 EO_STOP
 chmod +x "$START_DIR/stop-kali.sh"
 
-# -------------------------
-# Add aliases to shell rc files
-# -------------------------
-info "Adding aliases to ~/.bashrc and ~/.zshrc (if present)."
+# Add aliases to rc files
+info "Adding aliases to shell rc files..."
 alias_line1="alias start-kali=\"$START_DIR/start-kali.sh\""
 alias_line2="alias stop-kali=\"$START_DIR/stop-kali.sh\""
 grep -qxF "$alias_line1" ~/.bashrc 2>/dev/null || echo "$alias_line1" >> ~/.bashrc
@@ -250,19 +237,22 @@ if [ -f ~/.zshrc ]; then
   grep -qxF "$alias_line2" ~/.zshrc 2>/dev/null || echo "$alias_line2" >> ~/.zshrc
 fi
 
-# -------------------------
 # Auto-start GUI now
-# -------------------------
-info "Auto-starting Kali GUI now (vncserver display $VNC_DISPLAY)..."
-bash "$START_DIR/start-kali.sh" || warn "start-kali script reported warnings."
+info "Auto-starting Kali GUI now..."
+bash "$START_DIR/start-kali.sh" || warn "start-kali reported warnings"
+sleep 4
 
-# Give server a moment to spin up
-sleep 3
+# Detect host IP for user convenience
+HOST_IP=$(detect_host_ip)
+if [ -z "$HOST_IP" ]; then HOST_IP="127.0.0.1"; fi
+VNC_URI="vnc://${HOST_IP}:${VNC_PORT}"
+# Try including password in URI (some clients accept user:pass@host)
+VNC_URI_WITH_PASS="vnc://:$(python3 -c 'import sys,urllib.parse as u; print(u.quote(sys.argv[1]))' "$VNC_PASS")@${HOST_IP}:${VNC_PORT}"
 
-# -------------------------
-# Try to auto-launch bVNC (if installed) or open Play Store page for it
-# -------------------------
-info "Checking for bVNC app..."
+info "VNC connection: $HOST_IP:$VNC_PORT (password set)"
+
+# Auto-launch bVNC if installed, otherwise open Play Store
+info "Checking for bVNC..."
 BVNC_INSTALLED=0
 if command -v pm >/dev/null 2>&1; then
   if pm list packages | grep -qi "$BVNC_PKG"; then
@@ -270,20 +260,16 @@ if command -v pm >/dev/null 2>&1; then
   fi
 fi
 
-# Compose VNC intent (vnc://127.0.0.1:5901)
-VNC_URI="vnc://${VNC_HOST}:${VNC_PORT}"
-
 if [ $BVNC_INSTALLED -eq 1 ]; then
-  info "bVNC seems installed. Attempting to open connection..."
-  # Try to open bVNC via intent; many Androids accept VIEW on vnc:// to open bVNC
+  info "bVNC installed — attempting to open connection..."
+  # Try to open URI with password; fallback to URI without password if that fails
   if command -v am >/dev/null 2>&1; then
-    am start -a android.intent.action.VIEW -d "$VNC_URI" >/dev/null 2>&1 || warn "Could not open bVNC via intent; open bVNC manually and connect to $VNC_URI"
+    am start -a android.intent.action.VIEW -d "$VNC_URI_WITH_PASS" >/dev/null 2>&1 || am start -a android.intent.action.VIEW -d "$VNC_URI" >/dev/null 2>&1 || warn "Unable to auto-open bVNC; please open bVNC and connect to $VNC_URI"
   else
-    info "Cannot auto-open bVNC (no 'am' available). Please open bVNC and connect to: $VNC_URI"
+    info "Cannot auto-open bVNC (no am). Please open bVNC and connect to: $VNC_URI"
   fi
 else
-  info "bVNC not installed. Opening Play Store link so you can install it."
-  # Try to open Play Store market link; fallback to web url
+  info "bVNC not installed. Opening Play Store so you can install bVNC."
   if command -v am >/dev/null 2>&1; then
     am start -a android.intent.action.VIEW -d "$BVNC_MARKET_URI" >/dev/null 2>&1 || am start -a android.intent.action.VIEW -d "$BVNC_WEB_URL" >/dev/null 2>&1 || warn "Unable to open Play Store; please install bVNC from: $BVNC_WEB_URL"
   elif command -v termux-open-url >/dev/null 2>&1; then
@@ -293,36 +279,34 @@ else
   fi
 fi
 
-# -------------------------
-# Final messages & usage
-# -------------------------
-info "Installation finished and GUI started."
+# Final summary
 cat <<EOF
 
 SUCCESS ✅
+  VNC host: ${HOST_IP}
+  VNC port: ${VNC_PORT}
+  Display: ${VNC_DISPLAY}
+  Geometry: ${GEOM}
+  VNC password: (the password you provided / auto-generated)
+    -> note: password was set inside the Kali user as specified during install.
 
-  GUI details:
-    - VNC host: ${VNC_HOST}
-    - VNC port: ${VNC_PORT}
-    - Display: ${VNC_DISPLAY}
-    - Geometry: ${GEOM}
-    - Connect using bVNC (recommended) or any VNC client to: ${VNC_HOST}:${VNC_PORT}
+Connections:
+  - Recommended: open bVNC (auto-open attempted). If it failed, install bVNC or open it manually.
+  - VNC URI (with encoded password): ${VNC_URI_WITH_PASS}
+  - VNC URI (no password): ${VNC_URI}
 
 Convenience:
   - start-kali : starts VNC (if stopped)
   - stop-kali  : stops VNC
 
 Security note:
-  - For easy lab access this script started VNC without a password (SecurityTypes None).
-    To secure your session:
-      1) proot-distro login ${DIST_NAME} -- bash -lc "sudo -u termuxuser /usr/bin/vncpasswd"
-      2) Edit $START_DIR/start-kali.sh and remove the '-SecurityTypes None' flag.
+  - Using a password and removing '-SecurityTypes None' makes the session password protected.
+  - Do NOT expose VNC port publicly without additional protections (SSH tunnel, VPN).
 
 Troubleshooting:
-  - If VNC client cannot connect immediately, wait ~10 seconds and try again.
-  - To view VNC logs:
+  - If VNC client cannot connect immediately, wait ~10s and try again.
+  - View logs:
       proot-distro login ${DIST_NAME} -- bash -lc "ls -la /home/termuxuser/.vnc; tail -n 200 /home/termuxuser/.vnc/*.log"
-  - If proot-distro install failed: check storage and network; free up space.
 
 EOF
 
