@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# HCO-KALI-Termux.sh — full installer with bVNC auto-open
+# HCO-KALI-Termux.sh — full installer with secure bVNC auto-open via SSH tunnel
 # Author: Azhar | Hackers Colony
 # Usage: chmod +x HCO-KALI-Termux.sh && ./HCO-KALI-Termux.sh
 
@@ -15,6 +15,7 @@ START_WRAPPER="${HOME}/start-bvnc"
 DIST_USER="termuxuser"
 VNC_PORT=5901
 VNC_PASS_FILE="${HOME}/.hco_vnc_pass"
+SSH_PORT=2222
 
 # ---------- Helpers ----------
 info(){ printf "\e[1;36m[INFO]\e[0m %s\n" "$*"; }
@@ -44,7 +45,7 @@ read -r -p $'\nPress ENTER when you are back in Termux to continue: '
 # ---------- Ensure prerequisites ----------
 info "Updating packages and installing essentials..."
 pkg update -y || warn "pkg update failed"
-pkg install -y proot-distro wget curl coreutils util-linux openssh git || true
+pkg install -y proot-distro wget curl coreutils util-linux openssh git openssl || true
 command -v proot-distro >/dev/null 2>&1 || err "proot-distro not installed. Install Termux from F-Droid and try again."
 
 # ---------- Create Kali/Debian profile ----------
@@ -97,13 +98,16 @@ set -e
 export DEBIAN_FRONTEND=noninteractive
 apt update -y || true
 apt upgrade -y || true
-apt install -y x11-xkb-utils dbus-x11 nano openbox xterm wget curl python3 lxde-core lxterminal sudo net-tools || true
-apt install -y x11vnc || true
+apt install -y x11-xkb-utils dbus-x11 nano openbox xterm wget curl python3 lxde-core lxterminal sudo net-tools openssh-server x11vnc || true
 if ! id -u termuxuser >/dev/null 2>&1; then
   useradd -m -s /bin/bash termuxuser || true
   echo "termuxuser:termux" | chpasswd || true
   usermod -aG sudo termuxuser || true
 fi
+mkdir -p /var/run/sshd
+sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+service ssh restart || /usr/sbin/sshd
 EOF
   proot-distro login "$DIST" -- bash -s < "$TMP_SCRIPT" || warn "Bootstrap finished with warnings"
   rm -f "$TMP_SCRIPT"
@@ -128,27 +132,31 @@ cat > "$START_WRAPPER" <<EOF
 #!/usr/bin/env bash
 DIST="$DIST"
 USER="$DIST_USER"
-PORT=$VNC_PORT
-PASS="$VNC_PASS"
+VNC_PORT=$VNC_PORT
+VNC_PASS="$VNC_PASS"
+SSH_PORT=$SSH_PORT
 
-echo "[INFO] Starting bVNC server inside \$DIST..."
+echo "[INFO] Starting bVNC server inside \$DIST (localhost only)..."
+
+# Start bVNC inside distro bound to 127.0.0.1
 proot-distro login "\$DIST" -- bash -lc "
 sudo -u \$USER mkdir -p ~/.vnc
-echo \$PASS | x11vnc -storepasswd -f > ~/.vnc/passwd
-x11vnc -display :0 -rfbport \$PORT -rfbauth ~/.vnc/passwd -forever -shared -bg -listen 0.0.0.0
+echo \$VNC_PASS | x11vnc -storepasswd -f > ~/.vnc/passwd
+x11vnc -display :0 -rfbport \$VNC_PORT -rfbauth ~/.vnc/passwd -forever -shared -bg -listen 127.0.0.1
 "
 
-echo "[INFO] bVNC server started on port \$PORT with password saved."
+# Start SSH tunnel from distro localhost to Termux host
+ssh -o StrictHostKeyChecking=no -f -N -L \$VNC_PORT:127.0.0.1:\$VNC_PORT \$USER@127.0.0.1 -p \$SSH_PORT || echo "SSH tunnel failed. Make sure SSH server in distro is running."
 
 # Detect Termux host IP
 HOST_IP=\$(ip addr show wlan0 2>/dev/null | grep 'inet ' | awk '{print \$2}' | cut -d/ -f1)
 HOST_IP=\${HOST_IP:-127.0.0.1}
 
-echo "[INFO] Opening bVNC to vnc://\$HOST_IP:\$PORT"
+echo "[INFO] Opening bVNC to vnc://\$HOST_IP:\$VNC_PORT"
 if command -v am >/dev/null 2>&1; then
-  am start -a android.intent.action.VIEW -d vnc://\$HOST_IP:\$PORT >/dev/null 2>&1 || echo "Open bVNC manually to \$HOST_IP:\$PORT"
+  am start -a android.intent.action.VIEW -d vnc://\$HOST_IP:\$VNC_PORT >/dev/null 2>&1 || echo "Open bVNC manually to \$HOST_IP:\$VNC_PORT"
 elif command -v termux-open-url >/dev/null 2>&1; then
-  termux-open-url vnc://\$HOST_IP:\$PORT >/dev/null 2>&1 || echo "Open bVNC manually to \$HOST_IP:\$PORT"
+  termux-open-url vnc://\$HOST_IP:\$VNC_PORT >/dev/null 2>&1 || echo "Open bVNC manually to \$HOST_IP:\$VNC_PORT"
 fi
 EOF
 chmod +x "$START_WRAPPER"
