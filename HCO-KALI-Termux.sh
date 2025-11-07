@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# HCO-KALI-Termux.sh
-# Installs Kali/Debian (proot-distro) + XFCE, creates start-xfce wrapper,
-# and will auto-open Termux:X11 + start XFCE only after user confirms.
+# HCO-KALI-Termux.sh (updated) — full installer with robust Termux:X11 detection
+# Author: Azhar | Hackers Colony
 # Usage: chmod +x HCO-KALI-Termux.sh && ./HCO-KALI-Termux.sh
 set -euo pipefail
 
@@ -11,31 +10,60 @@ PREFERRED="kali"
 FALLBACK="debian"
 BOOTSTRAP_FLAG="${HOME}/.hco_kali_bootstrap_done"
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-TERMUX_X11_PKG="com.termux.x11"
-DEFAULT_GEOM="1280x720"
+TERMUX_X11_CANDIDATES=( \
+  "com.termux.x11" \
+  "io.github.termux.x11" \
+  "com.termux.x11.debug" \
+)
 START_WRAPPER="${HOME}/start-xfce"
-DIST=""   # will be set to installed distro name
+DEFAULT_GEOM="1280x720"
 
-# ---------- helpers ----------
+# ---------- Helpers ----------
 info(){ printf "\e[1;36m[INFO]\e[0m %s\n" "$*"; }
 warn(){ printf "\e[1;33m[WARN]\e[0m %s\n" "$*"; }
 err(){ printf "\e[1;31m[ERR]\e[0m %s\n" "$*"; exit 1; }
 
 detect_arch(){ uname -m || echo "unknown"; }
 
-launch_android_app(){
+# tries to find an installed package from the candidate list; prints package name or empty
+find_termux_x11_pkg(){
+  # pm list packages outputs lines like: package:com.termux.x11
+  if ! command -v pm >/dev/null 2>&1; then
+    echo ""
+    return
+  fi
+  for pkg in "${TERMUX_X11_CANDIDATES[@]}"; do
+    if pm list packages 2>/dev/null | grep -qi "package:${pkg}"; then
+      echo "$pkg"
+      return
+    fi
+  done
+  # try looser matching: any package containing 'termux' and 'x11'
+  candidate=$(pm list packages 2>/dev/null | tr '[:upper:]' '[:lower:]' | grep -Eo 'package:[a-z0-9\._\-]*termux[a-z0-9\._\-]*x11[a-z0-9\._\-]*' | head -n1 | sed 's/package://')
+  if [ -n "$candidate" ]; then
+    echo "$candidate"
+    return
+  fi
+  echo ""
+}
+
+launch_android_pkg(){
   pkgname="$1"
   if [ -z "$pkgname" ]; then return 1; fi
-  if command -v monkey >/dev/null 2>&1; then
-    monkey -p "$pkgname" 1 >/dev/null 2>&1 && return 0 || true
-  fi
+  # Try am with MAIN intent
   if command -v am >/dev/null 2>&1; then
+    # try various likely activity names
     am start -a android.intent.action.MAIN -n "${pkgname}/.MainActivity" >/dev/null 2>&1 && return 0 || true
     am start -a android.intent.action.MAIN -n "${pkgname}/.LauncherActivity" >/dev/null 2>&1 && return 0 || true
     am start -a android.intent.action.MAIN -p "${pkgname}" >/dev/null 2>&1 && return 0 || true
   fi
+  # Try monkey (less ideal but works on many devices)
+  if command -v monkey >/dev/null 2>&1; then
+    monkey -p "$pkgname" 1 >/dev/null 2>&1 && return 0 || true
+  fi
+  # Try termux-open-url fallback to Play/Web page
   if command -v termux-open-url >/dev/null 2>&1; then
-    termux-open-url "https://github.com/termux/termux-x11/releases" >/dev/null 2>&1 || true
+    termux-open-url "https://play.google.com/store/apps/details?id=${pkgname}" >/dev/null 2>&1 || true
   fi
   return 2
 }
@@ -46,10 +74,12 @@ echo -e "\e[1;33m🔒 TOOL LOCKED — HCO-KALI-Termux\e[0m"
 echo "To continue please subscribe to Hackers Colony Tech on YouTube and click the bell."
 echo -n "Redirecting to YouTube in "
 for i in 9 8 7 6 5 4 3 2 1; do
-  echo -n "$i "
+  # cycle colors a bit
+  printf "\e[38;5;$((160 + (i*2) % 80))m%s \e[0m" "$i"
   sleep 1
 done
 echo
+# open YouTube if possible
 if command -v termux-open-url >/dev/null 2>&1; then
   termux-open-url "$YOUTUBE_URL" >/dev/null 2>&1 || true
 elif command -v am >/dev/null 2>&1; then
@@ -61,7 +91,7 @@ read -r -p $'\nPress ENTER when you are back in Termux to continue: '
 
 # ---------- Ensure prerequisites ----------
 info "Updating packages and ensuring proot-distro is installed..."
-pkg update -y || warn "pkg update failed (continuing)"
+pkg update -y || warn "pkg update failed (continue)"
 pkg install -y proot-distro wget curl coreutils util-linux openssh git || true
 if ! command -v proot-distro >/dev/null 2>&1; then
   err "proot-distro not available. Install Termux (from F-Droid) and ensure proot-distro package is installed."
@@ -101,6 +131,7 @@ fi
 
 # ---------- Install distro (kali preferred, debian fallback) ----------
 info "Attempting to install '${PREFERRED}' (if available), otherwise '${FALLBACK}'..."
+rc=0
 set +e
 if proot-distro list | grep -qi "^${PREFERRED}"; then
   proot-distro install "${PREFERRED}"
@@ -113,13 +144,18 @@ set -e
 
 if [ "$rc" -ne 0 ]; then
   warn "Could not install '${PREFERRED}'. Trying fallback '${FALLBACK}'..."
-  proot-distro install "${FALLBACK}" || err "Failed to install fallback distro '${FALLBACK}'. Check storage/network."
+  # If fallback is already installed, we will use it; otherwise install
+  if proot-distro list | grep -qi "^${FALLBACK}"; then
+    info "Fallback '${FALLBACK}' is already installed. Using existing '${FALLBACK}'."
+  else
+    proot-distro install "${FALLBACK}" || err "Failed to install fallback distro '${FALLBACK}'. Check storage/network."
+  fi
   DIST="${FALLBACK}"
 else
   DIST="${PREFERRED}"
 fi
 
-info "Installed distro alias: ${DIST}"
+info "Using distro alias: ${DIST}"
 
 # ---------- Bootstrap XFCE inside the distro ----------
 if [ ! -f "${BOOTSTRAP_FLAG}" ]; then
@@ -196,35 +232,38 @@ if [[ ! "$ANSWER" =~ ^([yY][eE][sS]|[yY])$ ]]; then
   info "Okay — not opening Termux:X11 now."
   cat <<MSG
 
-To start later, first open the Termux:X11 app (Termux X server) manually, then run:
+To start later (after you open Termux:X11 app manually), run:
   ${START_WRAPPER}
 
-Or run:
+Or:
   proot-distro login ${DIST} -- bash -lc "export DISPLAY=:0; sudo -u termuxuser /home/termuxuser/.xsession &"
 
 MSG
   exit 0
 fi
 
-# ---------- Attempt to launch Termux:X11 Android app ----------
-info "User agreed. Attempting to launch Termux:X11 Android app (package: ${TERMUX_X11_PKG})..."
-if pm list packages 2>/dev/null | grep -qi "${TERMUX_X11_PKG}"; then
-  info "Termux:X11 app appears to be installed. Launching it..."
-  launch_android_app "${TERMUX_X11_PKG}" || warn "Could not auto-launch Termux:X11 via intents; please open it manually."
+# ---------- Attempt to locate and launch Termux:X11 Android app ----------
+info "User agreed. Detecting Termux:X11 package..."
+TERMUX_X11_PKG=""
+TERMUX_X11_PKG="$(find_termux_x11_pkg || true)"
+
+if [ -n "${TERMUX_X11_PKG}" ]; then
+  info "Termux:X11 package detected: ${TERMUX_X11_PKG}"
+  info "Attempting to launch Termux:X11..."
+  launch_android_pkg "${TERMUX_X11_PKG}" || warn "Could not auto-launch Termux:X11 via intents; please open it manually."
 else
-  warn "Termux:X11 app not found on device. Opening download page..."
+  warn "Termux:X11 app not found on device by known package names."
+  # Try to open Termux:X11 GitHub releases page
   if command -v termux-open-url >/dev/null 2>&1; then
     termux-open-url "https://github.com/termux/termux-x11/releases" >/dev/null 2>&1 || true
   elif command -v am >/dev/null 2>&1; then
     am start -a android.intent.action.VIEW -d "https://github.com/termux/termux-x11/releases" >/dev/null 2>&1 || true
-  else
-    echo "Please install Termux:X11 (package: ${TERMUX_X11_PKG}) from GitHub releases or mirror."
   fi
-  warn "After installing Termux:X11, run ${START_WRAPPER}"
+  warn "After installing Termux:X11, run: ${START_WRAPPER}"
   exit 0
 fi
 
-# ---------- Wait and start XFCE via start-xfce ----------
+# ---------- Wait a few seconds and start XFCE via start-xfce ----------
 info "Waiting a few seconds for the Termux:X11 app to initialize..."
 sleep 4
 info "Starting XFCE via ${START_WRAPPER} ..."
