@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# HCO-KALI-Termux.sh — Full installer with VNC auto-start (no sudo)
+# HCO-KALI-Termux.sh — Full installer with auto VNC start & auto-port
 # Author: Azhar | Hackers Colony
 
 set -euo pipefail
@@ -12,12 +12,12 @@ BOOTSTRAP_FLAG="${HOME}/.hco_kali_bootstrap_done"
 START_WRAPPER="${HOME}/start-vnc"
 VNC_PASSWORD_FILE="${HOME}/.vncpass"
 DEFAULT_GEOM="1280x720"
+DISPLAY_NUM=":1"
 
 # ---------------- Helpers ----------------
 info(){ printf "\e[1;36m[INFO]\e[0m %s\n" "$*"; }
 warn(){ printf "\e[1;33m[WARN]\e[0m %s\n" "$*"; }
 err(){ printf "\e[1;31m[ERR]\e[0m %s\n" "$*"; exit 1; }
-
 detect_arch(){ uname -m || echo "unknown"; }
 
 # ---------------- YouTube lock ----------------
@@ -40,16 +40,15 @@ else
 fi
 read -r -p $'\nPress ENTER when you are back in Termux to continue: '
 
-# ---------------- Ensure prerequisites ----------------
-info "Updating packages and installing required Termux packages..."
-pkg update -y || warn "pkg update failed (continue)"
-pkg install -y proot-distro wget curl coreutils util-linux openssh git vim x11-repo xorg-x11-server-utils x11vnc xvfb || true
-command -v proot-distro >/dev/null 2>&1 || err "proot-distro not available."
+# ---------------- Prerequisites ----------------
+info "Updating packages..."
+pkg update -y || warn "pkg update failed"
+pkg install -y proot-distro wget curl coreutils util-linux git vim x11-repo x11-utils x11vnc xvfb || true
+command -v proot-distro >/dev/null 2>&1 || err "proot-distro missing"
 
-# ---------------- Create distro profile if missing ----------------
+# ---------------- Distro install ----------------
 if ! proot-distro list | grep -qi "^${PREFERRED}|^${FALLBACK}"; then
-    info "No Kali/Debian profile found. Creating Kali profile..."
-    mkdir -p "${PREFIX}/etc/proot-distro" || true
+    info "Creating Kali profile..."
     arch=$(detect_arch)
     case "$arch" in
         aarch64|arm64)
@@ -63,6 +62,7 @@ if ! proot-distro list | grep -qi "^${PREFERRED}|^${FALLBACK}"; then
             ;;
     esac
     if [ -n "$TARBALL_URL" ]; then
+        mkdir -p "${PREFIX}/etc/proot-distro"
         cat > "${PREFIX}/etc/proot-distro/${PREFERRED}.sh" <<EOF
 DISTRO_NAME="Kali Linux (HCO profile)"
 DISTRO_COMMENT="Kali Linux custom profile (HCO)"
@@ -71,21 +71,20 @@ TARBALL_SHA256=""
 EOF
         info "Custom Kali profile created."
     else
-        warn "No suitable tarball for arch '$arch'."
+        warn "No suitable tarball for arch $arch"
     fi
 fi
 
-# ---------------- Install distro ----------------
-info "Installing distro..."
+# Install distro
 DIST="$PREFERRED"
 set +e
-proot-distro install "$DIST" || { warn "Failed to install $DIST"; DIST="$FALLBACK"; proot-distro install "$DIST" || err "Fallback failed"; }
+proot-distro install "$DIST" || { warn "$DIST failed, trying fallback"; DIST="$FALLBACK"; proot-distro install "$DIST" || err "Fallback failed"; }
 set -e
 info "Using distro: $DIST"
 
-# ---------------- Bootstrap XFCE and VNC ----------------
+# ---------------- Bootstrap XFCE ----------------
 if [ ! -f "$BOOTSTRAP_FLAG" ]; then
-    info "Bootstrapping XFCE + VNC inside distro..."
+    info "Bootstrapping XFCE inside $DIST..."
     TMPF=$(mktemp)
     cat > "$TMPF" <<'EOF'
 #!/usr/bin/env bash
@@ -93,7 +92,7 @@ set -e
 export DEBIAN_FRONTEND=noninteractive
 apt update -y || true
 apt upgrade -y || true
-apt install -y xfce4 xfce4-terminal xfce4-panel xfdesktop dbus-x11 x11-utils xterm nano python3 x11vnc xvfb || true
+apt install -y xfce4 xfce4-terminal xfce4-panel xfdesktop dbus-x11 x11-utils x11vnc xvfb nano || true
 
 # Create user
 if ! id -u termuxuser >/dev/null 2>&1; then
@@ -110,7 +109,6 @@ exec startxfce4
 XSE
 chmod +x ${USER_HOME}/.xsession || true
 EOF
-
     proot-distro login "$DIST" -- bash -s < "$TMPF" || warn "Bootstrap warnings"
     rm -f "$TMPF"
     touch "$BOOTSTRAP_FLAG"
@@ -119,50 +117,51 @@ else
     info "Bootstrap already done."
 fi
 
-# ---------------- Create VNC start wrapper ----------------
+# ---------------- Create VNC wrapper with auto-port ----------------
 cat > "$START_WRAPPER" <<'EOS'
 #!/usr/bin/env bash
 set -euo pipefail
 
-DISTRO="debian"   # change if using Kali
-VNC_PASS_FILE="$HOME/.vncpass"
+DISTRO="'"$DIST"'"
 DISPLAY_NUM=":1"
-GEOM="${GEOM:-1280x720}"
+DEFAULT_GEOM="1280x720"
+VNC_PASS_FILE="$HOME/.vncpass"
 
 # Generate VNC password if missing
 if [ ! -f "$VNC_PASS_FILE" ]; then
     PASS=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 12)
     echo "$PASS" > "$VNC_PASS_FILE"
-    echo "Generated VNC password: $PASS"
 else
     PASS=$(cat "$VNC_PASS_FILE")
-    echo "Using saved VNC password: $PASS"
 fi
 
-echo "Starting Xvfb and x11vnc inside $DISTRO..."
+echo "[INFO] Using VNC password: $PASS"
+
+# Auto detect free port
+PORT=5901
+while netstat -tuln | grep -q ":$PORT"; do
+    PORT=$((PORT+1))
+done
+echo "[INFO] VNC server will use port $PORT"
+
+# Start VNC inside distro
 proot-distro login "$DISTRO" -- bash -lc "
-    mkdir -p /home/termuxuser/.vnc
-    echo '$PASS' | vncpasswd -f > /home/termuxuser/.vnc/passwd
-    chmod 600 /home/termuxuser/.vnc/passwd
-    export DISPLAY=$DISPLAY_NUM
-    Xvfb $DISPLAY_NUM -screen 0 $GEOM -ac &
-    sleep 2
-    x11vnc -display $DISPLAY_NUM -rfbport 5901 -forever -passwdfile /home/termuxuser/.vnc/passwd &
-    echo 'VNC server is running!'
+mkdir -p /home/termuxuser/.vnc
+echo '$PASS' | vncpasswd -f > /home/termuxuser/.vnc/passwd
+chmod 600 /home/termuxuser/.vnc/passwd
+export DISPLAY=$DISPLAY_NUM
+Xvfb $DISPLAY_NUM -screen 0 $DEFAULT_GEOM -ac &
+sleep 2
+x11vnc -display $DISPLAY_NUM -rfbport $PORT -forever -passwdfile /home/termuxuser/.vnc/passwd &
+echo '[INFO] VNC server running on 127.0.0.1:'\$PORT
 "
-echo "Connect your VNC client to 127.0.0.1:5901 with password: $PASS"
 EOS
 
 chmod +x "$START_WRAPPER"
 
-# ---------------- Prompt to start VNC ----------------
-read -r -p "Start VNC now? [y/N]: " ANSWER
-ANSWER="${ANSWER:-N}"
-if [[ "$ANSWER" =~ ^([yY][eE][sS]|[yY])$ ]]; then
-    info "Starting VNC..."
-    bash "$START_WRAPPER"
-else
-    info "You can start VNC later with: $START_WRAPPER"
-fi
+# ---------------- Auto-start VNC ----------------
+info "Auto-starting VNC..."
+bash "$START_WRAPPER"
 
 info "Done — HCO-KALI-Termux by Azhar"
+info "Connect your VNC client to 127.0.0.1:<port> using password from $VNC_PASSWORD_FILE"
