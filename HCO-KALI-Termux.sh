@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# HCO-KALI-Termux.sh — full installer with bVNC auto-open & SSH tunnel
+# HCO-KALI-Termux.sh — full installer with bVNC auto-open
 # Author: Azhar | Hackers Colony
 # Usage: chmod +x HCO-KALI-Termux.sh && ./HCO-KALI-Termux.sh
 
@@ -20,10 +20,9 @@ VNC_PASS_FILE="${HOME}/.hco_vnc_pass"
 info(){ printf "\e[1;36m[INFO]\e[0m %s\n" "$*"; }
 warn(){ printf "\e[1;33m[WARN]\e[0m %s\n" "$*"; }
 err(){ printf "\e[1;31m[ERR]\e[0m %s\n" "$*"; exit 1; }
-
 detect_arch(){ uname -m || echo "unknown"; }
 
-# ---------- YouTube redirect (locked tool) ----------
+# ---------- YouTube redirect ----------
 clear
 echo -e "\e[1;33m🔒 TOOL LOCKED — HCO-KALI-Termux\e[0m"
 echo "Subscribe to Hackers Colony Tech on YouTube and click the bell."
@@ -98,12 +97,8 @@ set -e
 export DEBIAN_FRONTEND=noninteractive
 apt update -y || true
 apt upgrade -y || true
-apt install -y x11-xkb-utils dbus-x11 nano openbox xterm wget curl python3 lxde-core lxterminal xfce4-terminal sudo net-tools || true
-
-# Install bVNC server (real package name can be tightvnc or x11vnc fallback)
+apt install -y x11-xkb-utils dbus-x11 nano openbox xterm wget curl python3 lxde-core lxterminal sudo net-tools || true
 apt install -y x11vnc || true
-
-# Create user
 if ! id -u termuxuser >/dev/null 2>&1; then
   useradd -m -s /bin/bash termuxuser || true
   echo "termuxuser:termux" | chpasswd || true
@@ -131,26 +126,29 @@ fi
 # ---------- Create start-bvnc wrapper ----------
 cat > "$START_WRAPPER" <<EOF
 #!/usr/bin/env bash
-# Start bVNC server inside $DIST
 DIST="$DIST"
 USER="$DIST_USER"
 PORT=$VNC_PORT
 PASS="$VNC_PASS"
 
 echo "[INFO] Starting bVNC server inside \$DIST..."
-
 proot-distro login "\$DIST" -- bash -lc "
 sudo -u \$USER mkdir -p ~/.vnc
 echo \$PASS | x11vnc -storepasswd -f > ~/.vnc/passwd
-x11vnc -display :0 -rfbport \$PORT -rfbauth ~/.vnc/passwd -forever -shared -bg
+x11vnc -display :0 -rfbport \$PORT -rfbauth ~/.vnc/passwd -forever -shared -bg -listen 0.0.0.0
 "
 
 echo "[INFO] bVNC server started on port \$PORT with password saved."
-echo "[INFO] Opening bVNC..."
+
+# Detect Termux host IP
+HOST_IP=\$(ip addr show wlan0 2>/dev/null | grep 'inet ' | awk '{print \$2}' | cut -d/ -f1)
+HOST_IP=\${HOST_IP:-127.0.0.1}
+
+echo "[INFO] Opening bVNC to vnc://\$HOST_IP:\$PORT"
 if command -v am >/dev/null 2>&1; then
-  am start -a android.intent.action.VIEW -d vnc://127.0.0.1:\$PORT >/dev/null 2>&1 || echo "Open bVNC manually."
+  am start -a android.intent.action.VIEW -d vnc://\$HOST_IP:\$PORT >/dev/null 2>&1 || echo "Open bVNC manually to \$HOST_IP:\$PORT"
 elif command -v termux-open-url >/dev/null 2>&1; then
-  termux-open-url vnc://127.0.0.1:\$PORT >/dev/null 2>&1 || echo "Open bVNC manually."
+  termux-open-url vnc://\$HOST_IP:\$PORT >/dev/null 2>&1 || echo "Open bVNC manually to \$HOST_IP:\$PORT"
 fi
 EOF
 chmod +x "$START_WRAPPER"
