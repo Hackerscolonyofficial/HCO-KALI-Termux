@@ -1,62 +1,81 @@
 #!/usr/bin/env bash
-# HCO KALI TERMUX — Full Kali Linux Installer (proot-distro)
-# File: HCO-KALI-TERMUX.sh
-# Code by Azhar | Hackers Colony
+# HCO-KALI-TERMUX.sh — Full Kali XFCE GUI Installer (aarch64)
+# Author: Azhar | Hackers Colony
 
-GREEN="\e[92m"; CYAN="\e[96m"; YELLOW="\e[93m"; BOLD="\e[1m"; RESET="\e[0m"
+set -euo pipefail
+ARCH=$(dpkg --print-architecture)
 
-clear
-echo -e "${GREEN}${BOLD}HCO KALI in Termux${RESET}"
-echo -e "${CYAN}${BOLD}by Azhar | Hackers Colony${RESET}"
-echo
-
-# ---------- TOOL LOCK ----------
-echo -e "${YELLOW}${BOLD}This tool is locked 🔒"
-echo -e "Subscribe to unlock 🔓${RESET}"
-echo
-
-for i in {9..1}; do
-    echo -e "${GREEN}${BOLD}$i${RESET}"
-    sleep 1
-done
-
-termux-open-url "https://youtube.com/@hackers_colony_tech"
+echo "--------------------------------------------"
+echo "     HCO Kali Linux XFCE Installer"
+echo "        Author: Azhar | Hackers Colony"
+echo "--------------------------------------------"
 sleep 2
-read -p "Press ENTER after subscribing... "
 
-clear
+# ---------- ROOTFS URL ----------
+case "$ARCH" in
+    aarch64)
+        ROOTFS_URL="https://kali.download/nethunter-images/kali-2023.3/rootfs/kalifs-arm64-full.tar.xz"
+        ;;
+    *)
+        echo "[!] Unsupported CPU architecture: $ARCH"
+        exit 1
+        ;;
+esac
 
-# ---------- INSTALL DEPENDENCIES ----------
-echo -e "${CYAN}${BOLD}[+] Installing packages...${RESET}"
-pkg update -y
-pkg install proot-distro wget tar x11-repo -y
+# ---------- PACKAGE SETUP ----------
+pkg update -y && pkg upgrade -y
+pkg install proot-distro wget tar pulseaudio termux-x11-nightly -y
 
-# ---------- INSTALL OFFICIAL KALI ----------
-echo -e "${CYAN}${BOLD}[+] Installing Full Kali Linux (no external links)...${RESET}"
-proot-distro install kali || { echo -e "${RED}Kali install failed!${RESET}"; exit 1; }
+# ---------- DOWNLOAD ROOTFS ----------
+mkdir -p $PREFIX/var/lib/proot-distro/tarballs
+cd $PREFIX/var/lib/proot-distro/tarballs
 
-# ---------- CREATE START SCRIPT ----------
-cat > start-kali.sh << 'EOF'
-#!/usr/bin/env bash
-proot-distro login kali
+echo "[+] Downloading Kali rootfs..."
+wget -O kali-rootfs.tar.xz "$ROOTFS_URL"
+
+# ---------- INSTALL KALI ----------
+echo "[+] Installing Kali Linux..."
+proot-distro install --override-alias kali kali-rootfs.tar.xz
+
+# ---------- CONFIGURE GUI ----------
+KALI_ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/kali"
+
+mkdir -p "$KALI_ROOTFS/root"
+
+cat << 'EOF' > "$KALI_ROOTFS/root/start-xfce.sh"
+#!/bin/bash
+export DISPLAY=:0
+export PULSE_SERVER=127.0.0.1
+pulseaudio --start
+startxfce4
 EOF
 
-chmod +x start-kali.sh
+chmod +x "$KALI_ROOTFS/root/start-xfce.sh"
 
-# ---------- SHOW CREDENTIALS ----------
-clear
-echo -e "${GREEN}${BOLD}✔ HCO KALI TERMUX Installed Successfully${RESET}"
-echo
-echo -e "${CYAN}${BOLD}VNC Login Details:${RESET}"
-echo -e "${GREEN}Address : ${BOLD}127.0.0.1:8081${RESET}"
-echo -e "${GREEN}Username: ${BOLD}HCOKali${RESET}"
-echo -e "${GREEN}Password: ${BOLD}HCO786${RESET}"
-echo
-echo -e "${YELLOW}Start VNC manually inside Kali:${RESET}"
-echo -e "${CYAN}vncserver :1 -geometry 1280x720 -localhost no -rfbport 8081${RESET}"
-echo
-echo -e "${YELLOW}To enter Kali shell:${RESET}"
-echo -e "${CYAN}./start-kali.sh${RESET}"
-echo
-read -p "Press ENTER to launch Kali shell... "
-./start-kali.sh
+# ---------- INSTALL XFCE DESKTOP ----------
+echo "[+] Installing XFCE Desktop..."
+proot-distro login kali -- << 'EOF'
+apt update
+apt install xfce4 xfce4-goodies kali-themes dbus-x11 tigervnc-standalone-server -y
+apt install firefox-esr neofetch git curl wget nmap zip unzip nano -y
+EOF
+
+# ---------- CREATE DESKTOP STARTER ----------
+cat > $PREFIX/bin/kali-xfce << 'EOF'
+#!/bin/bash
+termux-x11 :0 >/dev/null 2>&1 &
+sleep 2
+proot-distro login kali -- ./root/start-xfce.sh
+EOF
+
+chmod +x $PREFIX/bin/kali-xfce
+
+echo ""
+echo "--------------------------------------------"
+echo " ✔ Kali Linux XFCE Installed Successfully!"
+echo "--------------------------------------------"
+echo " Start the GUI Desktop:"
+echo "     kali-xfce"
+echo "--------------------------------------------"
+echo " Code by Azhar | Hackers Colony"
+echo "--------------------------------------------"
