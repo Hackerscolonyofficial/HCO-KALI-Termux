@@ -1,13 +1,8 @@
 #!/usr/bin/env bash
 # HCO KALI TERMUX — Full Kali Linux Installer (aarch64)
-# File: HCO-KALI-TERMUX.sh
 # Code by Azhar | Hackers Colony
 
-GREEN="\e[92m"
-CYAN="\e[96m"
-YELLOW="\e[93m"
-BOLD="\e[1m"
-RESET="\e[0m"
+GREEN="\e[92m"; CYAN="\e[96m"; YELLOW="\e[93m"; BOLD="\e[1m"; RESET="\e[0m"
 
 clear
 echo -e "${GREEN}${BOLD}HCO KALI in Termux${RESET}"
@@ -35,8 +30,8 @@ echo -e "${CYAN}${BOLD}[+] Installing required packages...${RESET}"
 pkg update -y
 pkg install wget proot tar xz-utils -y
 
-# ---------- DOWNLOAD FULL KALI ROOTFS ----------
-ROOTFS_URL="https://kali.download/nethunter-images/current/rootfs/kalifs-arm64-full.tar.xz"
+# ---------- DOWNLOAD FULL KALI ROOTFS (VALID MIRROR) ----------
+ROOTFS_URL="https://kali.download/nethunter-images/2024.4/rootfs/kalifs-arm64-full.tar.xz"
 
 mkdir -p kali-fs
 cd kali-fs
@@ -45,7 +40,7 @@ echo -e "${CYAN}${BOLD}[+] Downloading Full Kali rootfs (1.2GB)...${RESET}"
 wget -O kali.tar.xz "$ROOTFS_URL" || { echo "Download failed!"; exit 1; }
 
 echo -e "${CYAN}${BOLD}[+] Extracting Kali rootfs (3–5 minutes)...${RESET}"
-tar -xJf kali.tar.xz || { echo -e "${RED}Extraction failed!${RESET}"; exit 1; }
+tar -xJf kali.tar.xz || { echo -e "Extraction failed!"; exit 1; }
 
 rm kali.tar.xz
 cd ..
@@ -62,7 +57,6 @@ EOF
 
 chmod +x start-kali.sh
 
-# ---------- SUCCESS MESSAGE ----------
 clear
 echo -e "${GREEN}${BOLD}✔ HCO KALI TERMUX Installed Successfully${RESET}"
 echo
@@ -71,7 +65,7 @@ echo -e "${GREEN}Address : ${BOLD}127.0.0.1:8081${RESET}"
 echo -e "${GREEN}Username: ${BOLD}HCOKali${RESET}"
 echo -e "${GREEN}Password: ${BOLD}HCO786${RESET}"
 echo
-echo -e "${YELLOW}To start VNC inside Kali (run this after entering Kali):${RESET}"
+echo -e "${YELLOW}Start VNC manually inside Kali:${RESET}"
 echo -e "${CYAN}vncserver :1 -geometry 1280x720 -localhost no -rfbport 8081${RESET}"
 echo
 echo -e "${YELLOW}To enter Kali shell:${RESET}"
