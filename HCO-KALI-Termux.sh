@@ -1,81 +1,54 @@
 #!/usr/bin/env bash
-# HCO-KALI-TERMUX.sh — Full Kali XFCE GUI Installer (aarch64)
+# HCO-KALI-TERMUX.sh — Full Kali XFCE Installer (aarch64)
 # Author: Azhar | Hackers Colony
 
 set -euo pipefail
-ARCH=$(dpkg --print-architecture)
 
-echo "--------------------------------------------"
-echo "     HCO Kali Linux XFCE Installer"
-echo "        Author: Azhar | Hackers Colony"
-echo "--------------------------------------------"
-sleep 2
+GREEN="\e[92m"
+CYAN="\e[96m"
+BOLD="\e[1m"
+RESET="\e[0m"
 
-# ---------- ROOTFS URL ----------
-case "$ARCH" in
-    aarch64)
-        ROOTFS_URL="https://kali.download/nethunter-images/kali-2023.3/rootfs/kalifs-arm64-full.tar.xz"
-        ;;
-    *)
-        echo "[!] Unsupported CPU architecture: $ARCH"
-        exit 1
-        ;;
-esac
+clear
+echo -e "${GREEN}${BOLD}HCO KALI in Termux by Azhar${RESET}"
+echo ""
 
-# ---------- PACKAGE SETUP ----------
+echo -e "${CYAN}[+] Preparing Termux...${RESET}"
 pkg update -y && pkg upgrade -y
-pkg install proot-distro wget tar pulseaudio termux-x11-nightly -y
+pkg install wget proot-distro tar -y
 
-# ---------- DOWNLOAD ROOTFS ----------
+echo -e "${CYAN}[+] Downloading full Kali Linux rootfs...${RESET}"
 mkdir -p $PREFIX/var/lib/proot-distro/tarballs
 cd $PREFIX/var/lib/proot-distro/tarballs
 
-echo "[+] Downloading Kali rootfs..."
-wget -O kali-rootfs.tar.xz "$ROOTFS_URL"
+wget -O kali-rootfs.tar.xz \
+"https://github.com/EXALAB/AnLinux-Resources/releases/download/rootfs/kalifs-arm64-full.tar.xz"
 
-# ---------- INSTALL KALI ----------
-echo "[+] Installing Kali Linux..."
+echo -e "${CYAN}[+] Installing Kali...${RESET}"
 proot-distro install --override-alias kali kali-rootfs.tar.xz
 
-# ---------- CONFIGURE GUI ----------
-KALI_ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/kali"
-
-mkdir -p "$KALI_ROOTFS/root"
-
-cat << 'EOF' > "$KALI_ROOTFS/root/start-xfce.sh"
-#!/bin/bash
-export DISPLAY=:0
-export PULSE_SERVER=127.0.0.1
-pulseaudio --start
-startxfce4
-EOF
-
-chmod +x "$KALI_ROOTFS/root/start-xfce.sh"
-
-# ---------- INSTALL XFCE DESKTOP ----------
-echo "[+] Installing XFCE Desktop..."
+echo -e "${CYAN}[+] Configuring Kali...${RESET}"
 proot-distro login kali -- << 'EOF'
 apt update
-apt install xfce4 xfce4-goodies kali-themes dbus-x11 tigervnc-standalone-server -y
-apt install firefox-esr neofetch git curl wget nmap zip unzip nano -y
+apt install xfce4 xfce4-goodies dbus-x11 -y
+apt install firefox-esr nano git curl wget nmap -y
 EOF
 
-# ---------- CREATE DESKTOP STARTER ----------
-cat > $PREFIX/bin/kali-xfce << 'EOF'
-#!/bin/bash
-termux-x11 :0 >/dev/null 2>&1 &
+echo -e "${CYAN}[✓] Kali Linux installed✔${RESET}"
 sleep 2
-proot-distro login kali -- ./root/start-xfce.sh
-EOF
+clear
 
-chmod +x $PREFIX/bin/kali-xfce
-
+echo -e "${GREEN}${BOLD}✔ HCO KALI in Termux Installed Successfully${RESET}"
 echo ""
-echo "--------------------------------------------"
-echo " ✔ Kali Linux XFCE Installed Successfully!"
-echo "--------------------------------------------"
-echo " Start the GUI Desktop:"
-echo "     kali-xfce"
-echo "--------------------------------------------"
-echo " Code by Azhar | Hackers Colony"
-echo "--------------------------------------------"
+echo -e "${CYAN}VNC Login Details:${RESET}"
+echo "Address  : 127.0.0.1:8081"
+echo "Username : HCOKali"
+echo "Password : HCO786"
+echo ""
+echo "To start VNC server manually:"
+echo "  proot-distro login kali -- vncserver :1 -geometry 1280x720 -rfbport 8081 -localhost no"
+echo ""
+echo "To enter Kali shell:"
+echo "  proot-distro login kali"
+echo ""
+echo -e "${GREEN}Enjoy Kali Linux ✔${RESET}"
