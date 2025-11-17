@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# HCO KALI TERMUX — Full Kali Linux Installer (aarch64)
+# HCO KALI TERMUX — Full Kali Linux Installer (proot-distro)
+# File: HCO-KALI-TERMUX.sh
 # Code by Azhar | Hackers Colony
 
 GREEN="\e[92m"; CYAN="\e[96m"; YELLOW="\e[93m"; BOLD="\e[1m"; RESET="\e[0m"
@@ -26,37 +27,23 @@ read -p "Press ENTER after subscribing... "
 clear
 
 # ---------- INSTALL DEPENDENCIES ----------
-echo -e "${CYAN}${BOLD}[+] Installing required packages...${RESET}"
+echo -e "${CYAN}${BOLD}[+] Installing packages...${RESET}"
 pkg update -y
-pkg install wget proot tar xz-utils -y
+pkg install proot-distro wget tar x11-repo -y
 
-# ---------- DOWNLOAD FULL KALI ROOTFS (VALID MIRROR) ----------
-ROOTFS_URL="https://kali.download/nethunter-images/2024.4/rootfs/kalifs-arm64-full.tar.xz"
+# ---------- INSTALL OFFICIAL KALI ----------
+echo -e "${CYAN}${BOLD}[+] Installing Full Kali Linux (no external links)...${RESET}"
+proot-distro install kali || { echo -e "${RED}Kali install failed!${RESET}"; exit 1; }
 
-mkdir -p kali-fs
-cd kali-fs
-
-echo -e "${CYAN}${BOLD}[+] Downloading Full Kali rootfs (1.2GB)...${RESET}"
-wget -O kali.tar.xz "$ROOTFS_URL" || { echo "Download failed!"; exit 1; }
-
-echo -e "${CYAN}${BOLD}[+] Extracting Kali rootfs (3–5 minutes)...${RESET}"
-tar -xJf kali.tar.xz || { echo -e "Extraction failed!"; exit 1; }
-
-rm kali.tar.xz
-cd ..
-
-# ---------- CREATE KALI LAUNCHER ----------
+# ---------- CREATE START SCRIPT ----------
 cat > start-kali.sh << 'EOF'
 #!/usr/bin/env bash
-unset LD_PRELOAD
-proot --link2symlink -0 -r kali-fs \
--b /dev -b /proc -b /sys -b /data/data/com.termux/files/home \
--w /root /usr/bin/env -i HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-/bin/bash --login
+proot-distro login kali
 EOF
 
 chmod +x start-kali.sh
 
+# ---------- SHOW CREDENTIALS ----------
 clear
 echo -e "${GREEN}${BOLD}✔ HCO KALI TERMUX Installed Successfully${RESET}"
 echo
@@ -71,6 +58,5 @@ echo
 echo -e "${YELLOW}To enter Kali shell:${RESET}"
 echo -e "${CYAN}./start-kali.sh${RESET}"
 echo
-
 read -p "Press ENTER to launch Kali shell... "
 ./start-kali.sh
