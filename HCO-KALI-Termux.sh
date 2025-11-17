@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # HCO-KALI-TERMUX by Azhar | Hackers Colony
-# Fully working Kali + XFCE GUI + Termux-X11
+# Fully working Kali ARM64 + XFCE GUI + Termux-X11
 
 set -e
 
@@ -10,6 +10,7 @@ CYAN="\033[1;36m"
 RESET="\033[0m"
 
 YOUTUBE_LINK="https://youtube.com/@hackers_colony_tech?si=pvdCWZggTIuGb0ya"
+KALI_ROOTFS_URL="https://github.com/EXALAB/AnLinux-Resources/releases/download/rootfs/kalifs-arm64-full.tar.xz"
 
 # --------------------------
 # TOOL LOCK - SUBSCRIBE
@@ -35,15 +36,20 @@ sleep 1
 # --------------------------
 echo -e "${CYAN}[+] Installing required packages...${RESET}"
 pkg update -y
-pkg install wget proot-distro pulseaudio termux-x11 -y
+pkg install wget proot-distro pulseaudio termux-x11 tar -y
 
 # --------------------------
-# INSTALL KALI NETHUNTER
+# DOWNLOAD & INSTALL KALI ROOTFS
 # --------------------------
-echo -e "${CYAN}[+] Installing Kali Nethunter rootfs...${RESET}"
+echo -e "${CYAN}[+] Installing Kali ARM64 rootfs...${RESET}"
+
 if ! proot-distro list | grep -q "^kali"; then
-    echo -e "${YELLOW}Kali not found, installing...${RESET}"
-    proot-distro install kali
+    mkdir -p ~/kali-rootfs
+    cd ~/kali-rootfs
+    echo -e "${YELLOW}Downloading Kali rootfs... This may take several minutes${RESET}"
+    wget -O kalifs-arm64-full.tar.xz "$KALI_ROOTFS_URL"
+    echo -e "${CYAN}Installing Kali in proot-distro...${RESET}"
+    proot-distro install --override-alias kali --tarball kalifs-arm64-full.tar.xz
 else
     echo -e "${GREEN}Kali already installed, skipping...${RESET}"
 fi
@@ -72,7 +78,7 @@ echo -e "\033[1;32mVNC Login Details:\033[0m"
 echo -e "Address  : 127.0.0.1:8081"
 echo -e "Username : HCOKali"
 echo -e "Password : HCO786"
-echo -e "Enter Kali shell: ./start-kali.sh"
+echo -e "To enter Kali shell: ./start-kali.sh"
 EOF
 chmod +x start-x11.sh
 
@@ -81,6 +87,7 @@ cat > stop-kali.sh << 'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 pkill pulseaudio
 pkill -f startxfce4
+pkill -f Xtightvnc
 echo "XFCE stopped."
 EOF
 chmod +x stop-kali.sh
