@@ -1,110 +1,99 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
+# HCO KALI TERMUX — Full Kali Linux + XFCE + VNC
+# Created by Azhar (Hackers Colony)
+
 clear
 
-# -------- COLORS --------
-G="\033[1;32m"
-R="\033[1;31m"
-Y="\033[1;33m"
-C="\033[1;36m"
-W="\033[1;37m"
-B="\033[1m"
-NC="\033[0m"
+# ---------- Colours ----------
+green="\e[92m"
+cyan="\e[96m"
+red="\e[91m"
+yellow="\e[93m"
+bold="\e[1m"
+reset="\e[0m"
 
-TITLE="${G}${B}HCO KALI in Termux by Azhar${NC}"
-YOUTUBE_URL="https://youtube.com/@hackers_colony_tech"
+# ---------- Header ----------
+echo -e "${green}${bold}"
+echo "HCO KALI in Termux by Azhar"
+echo -e "${reset}"
 
-# -------- SIMPLE CLEAN BANNER --------
-banner() {
-    clear
-    echo -e "$TITLE"
-    echo -e "${C}${B}Full Kali Linux • XFCE • Auto VNC${NC}"
-    echo
-}
-
-banner
-
-# --------- SUBSCRIBE LOCK ---------
-echo -e "${R}${B}[TOOL LOCKED]${NC}"
-echo -e "${G}Subscribe to unlock HCO KALI TERMUX${NC}"
-echo -e "${Y}Redirecting in...${NC}"
+# ---------- Tool Lock ----------
+echo -e "${yellow}${bold}This tool is locked 🔒"
+echo -e "Subscribe to unlock 🔓${reset}"
+echo ""
 
 for i in 9 8 7 6 5 4 3 2 1; do
-    echo -e "${G}$i${NC}"
+    echo -e "${green}${bold}$i${reset}"
     sleep 1
 done
 
-termux-open-url "$YOUTUBE_URL"
-echo
-echo -e "${G}${B}After subscribing, Press ENTER to unlock...${NC}"
-read
+# Redirect
+termux-open-url "https://youtube.com/@hackers_colony_tech"
+sleep 4
 
-banner
-echo -e "${G}[UNLOCKED] Starting installation...${NC}"
-sleep 1
+read -p $'\e[92mPress ENTER after subscribing to continue...\e[0m'
+
 clear
-banner
 
-# -------- PACKAGES --------
-echo -e "${Y}Updating packages...${NC}"
-pkg update -y
-pkg install -y proot-distro wget tar
-
-# -------- DOWNLOAD FULL KALI ROOTFS --------
-banner
-echo -e "${G}Downloading Full Kali Linux RootFS (500MB)...${NC}"
-wget -O kali-rootfs.tar.xz https://kali.download/nethunter-images/current/rootfs/kalifs-arm64-full.tar.xz
-
-# -------- INSTALL KALI --------
-banner
-echo -e "${C}Extracting RootFS (This will take time)...${NC}"
-
-proot-distro remove kali 2>/dev/null
-proot-distro install --override-alias kali --tarball kali-rootfs.tar.xz
-
-# -------- CONFIGURE XFCE + VNC --------
-banner
-echo -e "${G}Configuring XFCE Desktop & VNC...${NC}"
-
-cat > /data/data/com.termux/files/usr/var/lib/proot-distro/kali/root/.vnc/xstartup << "EOF"
-#!/bin/sh
-xrdb $HOME/.Xresources
-startxfce4 &
-EOF
-
-chmod +x /data/data/com.termux/files/usr/var/lib/proot-distro/kali/root/.vnc/xstartup
-
-# -------- SET RANDOM VNC PASSWORD --------
-VNC_PASS="kali$(shuf -i 1000-9999 -n 1)"
-
-proot-distro login kali --user root --shared-tmp <<EOF
-mkdir -p /root/.vnc
-echo "$VNC_PASS" | vncpasswd -f > /root/.vnc/passwd
-chmod 600 /root/.vnc/passwd
-EOF
-
-# -------- START VNC SERVER --------
-banner
-echo -e "${Y}Starting VNC Server...${NC}"
-
-proot-distro login kali --user root --shared-tmp vncserver :1
-
-VNC_ADDR="127.0.0.1:5901"
-
-# -------- SHOW DETAILS --------
-banner
-echo -e "${C}${B}FULL KALI INSTALLED SUCCESSFULLY${NC}"
-echo
-echo -e "${Y}🌐 VNC Address: ${G}$VNC_ADDR${NC}"
-echo -e "${Y}🔑 VNC Password: ${R}${B}$VNC_PASS${NC}"
-echo -e "${Y}👤 Login User: ${G}root${NC}"
-echo
-echo -e "${C}Opening RealVNC Viewer...${NC}"
+# ---------- Start Installer ----------
+echo -e "${green}${bold}Starting HCO KALI TERMUX installation...${reset}"
 sleep 2
 
-am start -n com.realvnc.viewer.android/.app.ConnectionEditActivity >/dev/null 2>&1
+# Update packages
+pkg update -y && pkg upgrade -y
+pkg install -y proot-distro wget xfce4 tigervnc
 
-echo
-echo -e "${G}${B}Press ENTER to start Kali shell${NC}"
-read
+# ---------- Install Full Kali ----------
+echo -e "${cyan}${bold}Downloading & installing full Kali Linux (rootfs)...${reset}"
+proot-distro install kali
 
-proot-distro login kali --user root
+clear
+echo -e "${green}${bold}Kali installed successfully!${reset}"
+sleep 2
+
+# ---------- Configure XFCE Inside Kali ----------
+echo -e "${cyan}${bold}Configuring XFCE desktop inside Kali...${reset}"
+
+proot-distro login kali -- bash -c "
+apt update -y
+apt install -y xfce4 xfce4-goodies dbus-x11 tightvncserver
+"
+
+# ---------- Create VNC Startup Script ----------
+echo -e "${cyan}${bold}Setting up VNC server (Port: 8081)...${reset}"
+
+proot-distro login kali -- bash -c "
+mkdir -p ~/.vnc
+echo '#!/bin/bash
+xrdb ~/.Xresources
+startxfce4 &' > ~/.vnc/xstartup
+chmod +x ~/.vnc/xstartup
+"
+
+# ---------- Set VNC Password ----------
+echo -e "${green}${bold}Setting VNC password...${reset}"
+
+proot-distro login kali -- bash -c "
+echo -e 'HCO786\nHCO786\nn' | vncserver :1
+vncserver -kill :1
+"
+
+# ---------- Display Connection Info ----------
+clear
+echo -e "${green}${bold}HCO KALI TERMUX is ready!${reset}"
+echo ""
+echo -e "${cyan}${bold}Connect VNC using:${reset}"
+echo -e "${yellow}${bold}Address : 127.0.0.1:8081${reset}"
+echo -e "${yellow}${bold}Username: HCOKali${reset}"
+echo -e "${yellow}${bold}Password: HCO786${reset}"
+echo ""
+echo -e "${green}${bold}To start VNC server run:${reset}"
+echo -e "${cyan}proot-distro login kali -- vncserver :1 -geometry 1280x720 -localhost no -rfbport 8081${reset}"
+echo ""
+echo -e "${green}${bold}To enter Kali shell run:${reset}"
+echo -e "${cyan}proot-distro login kali${reset}"
+echo ""
+
+read -p $'\e[92mPress ENTER to launch Kali shell...\e[0m'
+
+proot-distro login kali
