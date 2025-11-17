@@ -1,125 +1,110 @@
-#!/usr/bin/env bash
-# ---------------------------------------------------------
-#      HCO KALI Termux — by Azhar
-#      Fully Automated Installer + VNC + YouTube Lock
-# ---------------------------------------------------------
+#!/data/data/com.termux/files/usr/bin/bash
+clear
 
-# Colors
-GRN='\033[1;32m'
-CYN='\033[1;36m'
-YLW='\033[1;33m'
-RED='\033[1;31m'
-BLD='\033[1m'
-RST='\033[0m'
+# -------- COLORS --------
+G="\033[1;32m"
+R="\033[1;31m"
+Y="\033[1;33m"
+C="\033[1;36m"
+W="\033[1;37m"
+B="\033[1m"
+NC="\033[0m"
 
+TITLE="${G}${B}HCO KALI in Termux by Azhar${NC}"
 YOUTUBE_URL="https://youtube.com/@hackers_colony_tech"
 
-# ------------------ YOUTUBE SUBSCRIBE LOCK ------------------
+# -------- SIMPLE CLEAN BANNER --------
+banner() {
+    clear
+    echo -e "$TITLE"
+    echo -e "${C}${B}Full Kali Linux • XFCE • Auto VNC${NC}"
+    echo
+}
 
-clear
-echo -e "${GRN}${BLD}"
-echo "#########################################################"
-echo "#                                                       #"
-echo "#           HCO KALI in Termux — by Azhar              #"
-echo "#                                                       #"
-echo "#########################################################"
-echo -e "${RST}"
+banner
 
-echo -e "${RED}${BLD}[🔒 TOOL LOCKED]${RST}"
-echo -e "${GRN}${BLD}Subscribe to Hackers Colony to unlock this tool!${RST}"
-echo -e "${YLW}${BLD}Redirecting in...${RST}"
+# --------- SUBSCRIBE LOCK ---------
+echo -e "${R}${B}[TOOL LOCKED]${NC}"
+echo -e "${G}Subscribe to unlock HCO KALI TERMUX${NC}"
+echo -e "${Y}Redirecting in...${NC}"
 
 for i in 9 8 7 6 5 4 3 2 1; do
-    echo -e "${GRN}${BLD}$i...${RST}"
+    echo -e "${G}$i${NC}"
     sleep 1
 done
 
-echo -e "${CYN}${BLD}Opening YouTube... Please subscribe and return.${RST}"
-sleep 1
 termux-open-url "$YOUTUBE_URL"
-
-echo ""
-echo -e "${GRN}${BLD}After subscribing, press ENTER to unlock tool...${RST}"
+echo
+echo -e "${G}${B}After subscribing, Press ENTER to unlock...${NC}"
 read
-clear
 
-echo -e "${GRN}${BLD}[🔓 TOOL UNLOCKED] Access Granted!${RST}"
+banner
+echo -e "${G}[UNLOCKED] Starting installation...${NC}"
 sleep 1
 clear
+banner
 
-# ------------------ MAIN BANNER ------------------
+# -------- PACKAGES --------
+echo -e "${Y}Updating packages...${NC}"
+pkg update -y
+pkg install -y proot-distro wget tar
 
-echo -e "${GRN}${BLD}"
-echo "#########################################################"
-echo "#                                                       #"
-echo "#           HCO KALI in Termux — by Azhar              #"
-echo "#                                                       #"
-echo "#########################################################"
-echo -e "${RST}\n"
+# -------- DOWNLOAD FULL KALI ROOTFS --------
+banner
+echo -e "${G}Downloading Full Kali Linux RootFS (500MB)...${NC}"
+wget -O kali-rootfs.tar.xz https://kali.download/nethunter-images/current/rootfs/kalifs-arm64-full.tar.xz
 
-# ---------------------------------------------------------
-# INSTALLATION PROCESS
-# ---------------------------------------------------------
+# -------- INSTALL KALI --------
+banner
+echo -e "${C}Extracting RootFS (This will take time)...${NC}"
 
-echo -e "${CYN}${BLD}[+] Updating Termux...${RST}"
-pkg update -y >/dev/null 2>&1
-pkg upgrade -y >/dev/null 2>&1
+proot-distro remove kali 2>/dev/null
+proot-distro install --override-alias kali --tarball kali-rootfs.tar.xz
 
-echo -e "${CYN}${BLD}[+] Installing required packages...${RST}"
-pkg install proot-distro wget -y >/dev/null 2>&1
+# -------- CONFIGURE XFCE + VNC --------
+banner
+echo -e "${G}Configuring XFCE Desktop & VNC...${NC}"
 
-# Install Kali
-echo -e "${YLW}${BLD}[+] Installing Kali Linux (Auto)...${RST}"
-proot-distro install kali >/dev/null 2>&1
+cat > /data/data/com.termux/files/usr/var/lib/proot-distro/kali/root/.vnc/xstartup << "EOF"
+#!/bin/sh
+xrdb $HOME/.Xresources
+startxfce4 &
+EOF
 
-echo -e "${GRN}${BLD}[✓] Kali Linux installed successfully.${RST}"
+chmod +x /data/data/com.termux/files/usr/var/lib/proot-distro/kali/root/.vnc/xstartup
 
-# ---------------------------------------------------------
-# KALI CONFIGURATION + VNC SERVER
-# ---------------------------------------------------------
+# -------- SET RANDOM VNC PASSWORD --------
+VNC_PASS="kali$(shuf -i 1000-9999 -n 1)"
 
-echo -e "${CYN}${BLD}[+] Setting up Kali environment...${RST}"
+proot-distro login kali --user root --shared-tmp <<EOF
+mkdir -p /root/.vnc
+echo "$VNC_PASS" | vncpasswd -f > /root/.vnc/passwd
+chmod 600 /root/.vnc/passwd
+EOF
 
-proot-distro login kali --shared-tmp -- bash << 'IN_KALI'
-apt update -y
-apt install tightvncserver xfce4 -y
+# -------- START VNC SERVER --------
+banner
+echo -e "${Y}Starting VNC Server...${NC}"
 
-USERNAME="hco"
-PASSWORD="hco123"
-useradd -m -s /bin/bash $USERNAME
-echo "$USERNAME:$PASSWORD" | chpasswd
+proot-distro login kali --user root --shared-tmp vncserver :1
 
-mkdir -p /home/$USERNAME/.vnc
-echo "hco123" | vncpasswd -f > /home/$USERNAME/.vnc/passwd
-chmod 600 /home/$USERNAME/.vnc/passwd
-chown -R $USERNAME:$USERNAME /home/$USERNAME/.vnc
+VNC_ADDR="127.0.0.1:5901"
 
-sudo -u $USERNAME vncserver :1
-IN_KALI
+# -------- SHOW DETAILS --------
+banner
+echo -e "${C}${B}FULL KALI INSTALLED SUCCESSFULLY${NC}"
+echo
+echo -e "${Y}🌐 VNC Address: ${G}$VNC_ADDR${NC}"
+echo -e "${Y}🔑 VNC Password: ${R}${B}$VNC_PASS${NC}"
+echo -e "${Y}👤 Login User: ${G}root${NC}"
+echo
+echo -e "${C}Opening RealVNC Viewer...${NC}"
+sleep 2
 
-echo -e "${GRN}${BLD}[✓] VNC Server started successfully.${RST}\n"
+am start -n com.realvnc.viewer.android/.app.ConnectionEditActivity >/dev/null 2>&1
 
-# ---------------------------------------------------------
-# SHOW DETAILS
-# ---------------------------------------------------------
-
-HOST="127.0.0.1"
-PORT="5901"
-USER="hco"
-PASS="hco123"
-NAME=$(hostname)
-
-echo -e "${CYN}${BLD}============== YOUR KALI LOGIN DETAILS ==============${RST}"
-echo -e "${GRN}${BLD}Username     : ${YLW}${USER}${RST}"
-echo -e "${GRN}${BLD}Password     : ${YLW}${PASS}${RST}"
-echo -e "${GRN}${BLD}VNC Address  : ${YLW}${HOST}:${PORT}${RST}"
-echo -e "${GRN}${BLD}Computer Name: ${YLW}${NAME}${RST}"
-echo -e "${CYN}${BLD}======================================================${RST}\n"
-
-echo -e "${GRN}${BLD}[✓] Open RealVNC Viewer and connect to:${RST}"
-echo -e "${YLW}${BLD}${HOST}:${PORT}${RST}"
-echo ""
-echo -e "${GRN}${BLD}Press ENTER to open Kali shell...${RST}"
+echo
+echo -e "${G}${B}Press ENTER to start Kali shell${NC}"
 read
 
-proot-distro login kali
+proot-distro login kali --user root
