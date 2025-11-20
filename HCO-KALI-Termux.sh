@@ -1,8 +1,9 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# HCO-KALI-TERMUX (FULL FIXED VERSION)
+# HCO-KALI-TERMUX (ARM64 FIXED)
 # Code by Azhar • Team HCO
 
 YOUTUBE_LINK="https://youtube.com/@hackers_colony_tech?sub_confirmation=1"
+KALI_ROOTFS_URL="https://images.kali.org/kali-2025.4/kali-linux-2025.4-arm64-rootfs.tar.xz"
 
 clear
 echo -e "\e[1m\e[96mHCO-KALI-TERMUX INSTALLER\e[0m"
@@ -36,19 +37,24 @@ clear
 
 echo -e "\e[1m\e[96mUpdating Termux...\e[0m"
 pkg update -y && pkg upgrade -y
-
-echo -e "\e[1m\e[96mInstalling required packages...\e[0m"
-pkg install wget proot-distro proot tar xfce4 tigervnc -y
+pkg install wget proot-distro proot tar xfce4 tigervnc x11-repo -y
 
 # ------------------------------- #
-#         INSTALL KALI
+#    DOWNLOAD AND INSTALL KALI
 # ------------------------------- #
 
 clear
 echo -e "\e[1m\e[93mChecking/Installing Kali Linux...\e[0m"
+
 if ! proot-distro list | grep -q kali; then
-    echo -e "\e[1m\e[93mKali not installed, installing now...\e[0m"
-    proot-distro install kali
+    echo -e "\e[1m\e[93mDownloading official Kali ARM64 rootfs (~500MB)...\e[0m"
+    mkdir -p $HOME/kali-rootfs
+    cd $HOME/kali-rootfs
+    wget -O kali-rootfs.tar.xz "$KALI_ROOTFS_URL"
+
+    echo -e "\e[1m\e[93mInstalling Kali Linux...\e[0m"
+    proot-distro install --override-url kali "$KALI_ROOTFS_URL"
+    echo -e "\e[1m\e[92m✔ Kali Installed Successfully!\e[0m"
 else
     echo -e "\e[1m\e[92mKali Linux already installed.\e[0m"
 fi
@@ -57,8 +63,7 @@ fi
 #     SETUP XFCE + DBUS FIX
 # ------------------------------- #
 
-echo -e "\e[1m\e[96mSetting up XFCE Desktop with DBUS fix...\e[0m"
-
+echo -e "\e[1m\e[96mSetting up XFCE Desktop + DBUS...\e[0m"
 proot-distro login kali -- bash -c "
 apt update -y
 apt install xfce4 xfce4-goodies dbus-x11 x11-utils xterm sudo -y
@@ -90,7 +95,7 @@ cat > /root/.vnc/xstartup << 'XEOF'
 export XKL_XMODMAP_DISABLE=1
 export DISPLAY=:1
 
-# Start DBUS (fix for blank screen)
+# Start DBUS (fix blank screen)
 if [ -z \"\$DBUS_SESSION_BUS_ADDRESS\" ]; then
     eval \$(dbus-launch --sh-syntax --exit-with-session)
 fi
@@ -110,8 +115,10 @@ cat > $PREFIX/bin/hco-kali << 'EOF'
 
 # Check if Kali is installed
 if ! proot-distro list | grep -q kali; then
-    echo -e "\e[1m\e[93mKali not installed, installing now...\e[0m"
-    proot-distro install kali
+    echo -e "\e[1m\e[93mKali not installed, downloading & installing now...\e[0m"
+    mkdir -p $HOME/kali-rootfs
+    wget -O $HOME/kali-rootfs/kali-rootfs.tar.xz https://images.kali.org/kali-2025.4/kali-linux-2025.4-arm64-rootfs.tar.xz
+    proot-distro install --override-url kali https://images.kali.org/kali-2025.4/kali-linux-2025.4-arm64-rootfs.tar.xz
 fi
 
 echo -e "\e[1m\e[96mStarting VNC Server on :1 ...\e[0m"
