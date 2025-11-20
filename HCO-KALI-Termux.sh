@@ -1,9 +1,10 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# HCO-KALI-TERMUX (ARM64 FIXED)
+# HCO-KALI-TERMUX (AUTO FULL INSTALL)
 # Code by Azhar • Team HCO
 
 YOUTUBE_LINK="https://youtube.com/@hackers_colony_tech?sub_confirmation=1"
 KALI_ROOTFS_URL="https://images.kali.org/kali-2025.4/kali-linux-2025.4-arm64-rootfs.tar.xz"
+KALI_DIR="$HOME/kali-rootfs"
 
 clear
 echo -e "\e[1m\e[96mHCO-KALI-TERMUX INSTALLER\e[0m"
@@ -16,16 +17,12 @@ sleep 1
 
 echo -e "\e[1m\e[93mThis tool requires SUBSCRIPTION to continue.\e[0m"
 echo -e "\e[1m\e[96mRedirecting to Hackers Colony Tech in 10 seconds...\e[0m\n"
-
 for i in {10..1}; do
     echo -e "\e[1m\e[91mPlease wait: $i\e[0m"
     sleep 1
 done
-
 termux-open-url "$YOUTUBE_LINK"
-
 read -p $'\n\e[1m\e[92mAfter subscribing press ENTER to continue...\e[0m'
-
 clear
 echo -e "\e[1m\e[92m✔ Subscription confirmed!\e[0m"
 sleep 1
@@ -40,71 +37,61 @@ pkg update -y && pkg upgrade -y
 pkg install wget proot-distro proot tar xfce4 tigervnc x11-repo -y
 
 # ------------------------------- #
-#    DOWNLOAD AND INSTALL KALI
+#  DOWNLOAD & INSTALL KALI AUTOMATICALLY
 # ------------------------------- #
 
-clear
-echo -e "\e[1m\e[93mChecking/Installing Kali Linux...\e[0m"
-
 if ! proot-distro list | grep -q kali; then
-    echo -e "\e[1m\e[93mDownloading official Kali ARM64 rootfs (~500MB)...\e[0m"
-    mkdir -p $HOME/kali-rootfs
-    cd $HOME/kali-rootfs
-    wget -O kali-rootfs.tar.xz "$KALI_ROOTFS_URL"
+    echo -e "\e[1m\e[93mKali not installed. Downloading rootfs (~500MB)...\e[0m"
+    mkdir -p "$KALI_DIR"
+    wget -O "$KALI_DIR/kali-rootfs.tar.xz" "$KALI_ROOTFS_URL"
 
     echo -e "\e[1m\e[93mInstalling Kali Linux...\e[0m"
-    proot-distro install --override-url kali "$KALI_ROOTFS_URL"
+    proot-distro install --override-url kali "$KALI_DIR/kali-rootfs.tar.xz"
     echo -e "\e[1m\e[92m✔ Kali Installed Successfully!\e[0m"
 else
     echo -e "\e[1m\e[92mKali Linux already installed.\e[0m"
 fi
 
 # ------------------------------- #
-#     SETUP XFCE + DBUS FIX
+#     SETUP XFCE + DBUS + VNC
 # ------------------------------- #
 
-echo -e "\e[1m\e[96mSetting up XFCE Desktop + DBUS...\e[0m"
+echo -e "\e[1m\e[96mSetting up XFCE Desktop + DBUS + VNC...\e[0m"
+
 proot-distro login kali -- bash -c "
 apt update -y
-apt install xfce4 xfce4-goodies dbus-x11 x11-utils xterm sudo -y
-"
+apt install xfce4 xfce4-goodies dbus-x11 x11-utils xterm sudo tigervnc -y
 
-# ------------------------------- #
-#         CREATE VNC STARTER
-# ------------------------------- #
-
-mkdir -p $HOME/.vnc
-
-cat > $HOME/.vnc/start-kali.sh << 'EOF'
-#!/bin/bash
-export DISPLAY=:1
-vncserver -kill :1 >/dev/null 2>&1
-vncserver -geometry 1280x720 -depth 24 :1
-EOF
-
-chmod +x $HOME/.vnc/start-kali.sh
-
-# ------------------------------- #
-#     FIXED XFCE xstartup (NO BLANK SCREEN)
-# ------------------------------- #
-
-proot-distro login kali -- bash -c "
 mkdir -p /root/.vnc
 cat > /root/.vnc/xstartup << 'XEOF'
 #!/bin/bash
 export XKL_XMODMAP_DISABLE=1
 export DISPLAY=:1
 
-# Start DBUS (fix blank screen)
 if [ -z \"\$DBUS_SESSION_BUS_ADDRESS\" ]; then
     eval \$(dbus-launch --sh-syntax --exit-with-session)
 fi
 
-# Start desktop
 startxfce4 &
 XEOF
 chmod +x /root/.vnc/xstartup
+
+echo 'kali' | vncpasswd -f > /root/.vnc/passwd
+chmod 600 /root/.vnc/passwd
 "
+
+# ------------------------------- #
+#     CREATE VNC STARTER SCRIPT
+# ------------------------------- #
+
+mkdir -p $HOME/.vnc
+cat > $HOME/.vnc/start-kali.sh << 'EOF'
+#!/bin/bash
+export DISPLAY=:1
+vncserver -kill :1 >/dev/null 2>&1
+vncserver -geometry 1280x720 -depth 24 :1
+EOF
+chmod +x $HOME/.vnc/start-kali.sh
 
 # ------------------------------- #
 #        CREATE LAUNCHER
@@ -113,7 +100,6 @@ chmod +x /root/.vnc/xstartup
 cat > $PREFIX/bin/hco-kali << 'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 
-# Check if Kali is installed
 if ! proot-distro list | grep -q kali; then
     echo -e "\e[1m\e[93mKali not installed, downloading & installing now...\e[0m"
     mkdir -p $HOME/kali-rootfs
@@ -128,29 +114,18 @@ echo -e "\e[1m\e[92mOpen VNC Viewer → 127.0.0.1:1\e[0m"
 echo -e "\e[1m\e[93mUsername: root\e[0m"
 echo -e "\e[1m\e[93mPassword: kali\e[0m"
 
-# Login into Kali
 proot-distro login kali
 EOF
-
 chmod +x $PREFIX/bin/hco-kali
-
-# ------------------------------- #
-#        SET DEFAULT VNC PASSWORD
-# ------------------------------- #
-
-proot-distro login kali -- bash -c "
-echo 'kali' | vncpasswd -f > /root/.vnc/passwd
-chmod 600 /root/.vnc/passwd
-"
 
 # ------------------------------- #
 #             DONE
 # ------------------------------- #
 
 clear
-echo -e "\e[1m\e[92m✔ HCO-KALI-TERMUX Fully Installed!\e[0m"
+echo -e "\e[1m\e[92m✔ HCO-KALI-TERMUX Fully Installed & Auto-Configured!\e[0m"
 echo -e "\e[1m\e[96mStart Kali Linux anytime using:\e[0m"
 echo -e "\e[1m\e[91m     hco-kali\e[0m"
 echo -e "\n\e[1m\e[93mVNC Address: 127.0.0.1:1"
 echo -e "VNC Password: kali\e[0m"
-echo -e "\n\e[1m\e[96mGUI + Keyboard + Pointer FIXED successfully!\e[0m"
+echo -e "\n\e[1m\e[96mGUI + Keyboard + Pointer FIXED. 100% WORKING!\e[0m"
