@@ -1,102 +1,136 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# HCO-KALI-TERMUX by Azhar | Hackers Colony
-# Fully working Kali ARM64 + XFCE GUI + Termux-X11
+# HCO-KALI-TERMUX
+# Code by Azhar • Team HCO
 
-set -e
+YOUTUBE_LINK="https://youtube.com/@hackers_colony_tech?sub_confirmation=1"
 
-GREEN="\033[1;32m"
-YELLOW="\033[1;33m"
-CYAN="\033[1;36m"
-RESET="\033[0m"
+clear
+echo -e "\e[1m\e[96mHCO-KALI-TERMUX INSTALLER\e[0m"
+echo -e "\e[1m\e[92mCode by Azhar • Hackers Colony\e[0m\n"
+sleep 1
 
-YOUTUBE_LINK="https://youtube.com/@hackers_colony_tech?si=pvdCWZggTIuGb0ya"
-KALI_ROOTFS_URL="https://github.com/EXALAB/AnLinux-Resources/releases/download/rootfs/kalifs-arm64-full.tar.xz"
+# ------------------------------- #
+#        TOOL LOCK – YOUTUBE
+# ------------------------------- #
 
-# --------------------------
-# TOOL LOCK - SUBSCRIBE
-# --------------------------
-echo -e "${GREEN}HCO KALI TERMUX by Azhar${RESET}"
-echo -e "${YELLOW}This tool is locked 🔒"
-echo -e "Subscribe to unlock 🔓${RESET}"
-echo -e "${CYAN}Redirecting in 9 seconds...${RESET}"
-for i in {9..1}; do
-    echo -e "${GREEN}$i${RESET}"
+echo -e "\e[1m\e[93mThis tool requires SUBSCRIPTION to continue.\e[0m"
+echo -e "\e[1m\e[96mRedirecting to Hackers Colony Tech in 10 seconds...\e[0m\n"
+
+for i in {10..1}
+do
+    echo -e "\e[1m\e[91mPlease wait: $i\e[0m"
     sleep 1
 done
 
 termux-open-url "$YOUTUBE_LINK"
-read -p $'\033[1;36mAfter subscribing, press ENTER to continue...\033[0m'
+
+read -p $'\n\e[1m\e[92mAfter subscribing press ENTER to continue...\e[0m'
 
 clear
-echo -e "${GREEN}Unlock Successful ✔${RESET}"
+echo -e "\e[1m\e[92m✔ Subscription confirmed!\e[0m"
 sleep 1
+clear
 
-# --------------------------
-# INSTALL REQUIRED PACKAGES
-# --------------------------
-echo -e "${CYAN}[+] Installing required packages...${RESET}"
-pkg update -y
-pkg install wget proot-distro pulseaudio termux-x11 tar -y
+# ------------------------------- #
+#       START INSTALLATION
+# ------------------------------- #
 
-# --------------------------
-# DOWNLOAD & INSTALL KALI ROOTFS
-# --------------------------
-echo -e "${CYAN}[+] Installing Kali ARM64 rootfs...${RESET}"
+echo -e "\e[1m\e[96mUpdating Termux...\e[0m"
+pkg update -y && pkg upgrade -y
 
-if ! proot-distro list | grep -q "^kali"; then
-    mkdir -p ~/kali-rootfs
-    cd ~/kali-rootfs
-    echo -e "${YELLOW}Downloading Kali rootfs... This may take several minutes${RESET}"
-    wget -O kalifs-arm64-full.tar.xz "$KALI_ROOTFS_URL"
-    echo -e "${CYAN}Installing Kali in proot-distro...${RESET}"
-    proot-distro install --override-alias kali --tarball kalifs-arm64-full.tar.xz
-else
-    echo -e "${GREEN}Kali already installed, skipping...${RESET}"
-fi
+echo -e "\e[1m\e[96mInstalling required packages...\e[0m"
+pkg install wget proot-distro proot tar xfce4 tigervnc -y
 
-# --------------------------
-# CREATE START SCRIPTS
-# --------------------------
-echo -e "${CYAN}[+] Creating start scripts...${RESET}"
 
-# Start Kali shell
-cat > start-kali.sh << 'EOF'
+# ------------------------------- #
+#       INSTALL KALI LINUX
+# ------------------------------- #
+
+clear
+echo -e "\e[1m\e[93mInstalling Kali Linux...\e[0m"
+proot-distro install kali
+
+echo -e "\e[1m\e[92m✔ Kali Installed Successfully!\e[0m"
+
+
+# ------------------------------- #
+#     CONFIGURE XFCE DESKTOP
+# ------------------------------- #
+
+echo -e "\e[1m\e[96mSetting up XFCE GUI...\e[0m"
+
+proot-distro login kali -- bash -c "
+apt update -y
+apt install xfce4 xfce4-goodies dbus-x11 sudo -y
+"
+
+
+# ------------------------------- #
+#        VNC START FILE
+# ------------------------------- #
+
+mkdir -p $HOME/.vnc
+
+cat > $HOME/.vnc/start-kali.sh << 'EOF'
+#!/bin/bash
+export DISPLAY=:1
+vncserver -kill :1 >/dev/null 2>&1
+vncserver -geometry 1280x720 -depth 24 :1
+EOF
+
+chmod +x $HOME/.vnc/start-kali.sh
+
+
+# ------------------------------- #
+#       KALI INTERNAL VNC
+# ------------------------------- #
+
+proot-distro login kali -- bash -c '
+echo "
+#!/bin/bash
+export DISPLAY=:1
+startxfce4 &
+" > /root/.vnc/xstartup
+chmod +x /root/.vnc/xstartup
+'
+
+
+# ------------------------------- #
+#           LAUNCHER
+# ------------------------------- #
+
+cat > $PREFIX/bin/hco-kali << 'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
-pulseaudio --start --exit-idle-time=-1 >/dev/null 2>&1
+echo -e "\e[1m\e[96mStarting VNC Server on :1 ...\e[0m"
+bash $HOME/.vnc/start-kali.sh
+echo -e "\e[1m\e[92mOpen VNC Viewer → 127.0.0.1:1\e[0m"
+echo -e "\e[1m\e[93mUsername: root\e[0m"
+echo -e "\e[1m\e[93mPassword: kali\e[0m"
 proot-distro login kali
 EOF
-chmod +x start-kali.sh
 
-# Start GUI XFCE + VNC
-cat > start-x11.sh << 'EOF'
-#!/data/data/com.termux/files/usr/bin/bash
-echo -e "\033[1;32mStarting Termux-X11 and VNC...\033[0m"
-pulseaudio --start --exit-idle-time=-1 >/dev/null 2>&1
-vncserver :1 -geometry 1280x720 -localhost no -rfbport 8081
-proot-distro login kali --command "startxfce4 &"
-echo -e "\033[1;32mVNC Login Details:\033[0m"
-echo -e "Address  : 127.0.0.1:8081"
-echo -e "Username : HCOKali"
-echo -e "Password : HCO786"
-echo -e "To enter Kali shell: ./start-kali.sh"
-EOF
-chmod +x start-x11.sh
+chmod +x $PREFIX/bin/hco-kali
 
-# Stop GUI
-cat > stop-kali.sh << 'EOF'
-#!/data/data/com.termux/files/usr/bin/bash
-pkill pulseaudio
-pkill -f startxfce4
-pkill -f Xtightvnc
-echo "XFCE stopped."
-EOF
-chmod +x stop-kali.sh
 
-# --------------------------
-# FINISH MESSAGE
-# --------------------------
+# ------------------------------- #
+#       SET VNC PASSWORD
+# ------------------------------- #
+
+proot-distro login kali -- bash -c "
+mkdir -p /root/.vnc
+echo 'kali' | vncpasswd -f > /root/.vnc/passwd
+chmod 600 /root/.vnc/passwd
+"
+
+
+# ------------------------------- #
+#          FINISHED!
+# ------------------------------- #
+
 clear
-echo -e "${GREEN}HCO KALI TERMUX by Azhar ✅${RESET}"
-echo -e "${CYAN}Start GUI: ./start-x11.sh${RESET}"
-echo -e "${CYAN}Enter Kali shell: ./start-kali.sh${RESET}"
-echo -e "${YELLOW}Enjoy Kali Linux XFCE inside Termux!${RESET}"
+echo -e "\e[1m\e[92m✔ HCO-KALI-TERMUX Installed Successfully!\e[0m"
+echo -e "\e[1m\e[96mStart Kali anytime by typing:\e[0m"
+echo -e "\e[1m\e[91m     hco-kali\e[0m"
+echo -e "\n\e[1m\e[93mVNC Address: 127.0.0.1:1\e[0m"
+echo -e "\e[1m\e[93mVNC Password: kali\e[0m"
+echo -e "\n\e[1m\e[96mEnjoy Full GUI Kali Linux in Termux!\e[0m"
