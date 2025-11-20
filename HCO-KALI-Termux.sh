@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# HCO-KALI-TERMUX (FIXED VERSION)
+# HCO-KALI-TERMUX (FULL FIXED VERSION)
 # Code by Azhar • Team HCO
 
 YOUTUBE_LINK="https://youtube.com/@hackers_colony_tech?sub_confirmation=1"
@@ -31,7 +31,7 @@ sleep 1
 clear
 
 # ------------------------------- #
-#        INSTALLATION
+#       INSTALLATION
 # ------------------------------- #
 
 echo -e "\e[1m\e[96mUpdating Termux...\e[0m"
@@ -45,16 +45,19 @@ pkg install wget proot-distro proot tar xfce4 tigervnc -y
 # ------------------------------- #
 
 clear
-echo -e "\e[1m\e[93mInstalling Kali Linux...\e[0m"
-proot-distro install kali
-
-echo -e "\e[1m\e[92m✔ Kali Installed Successfully!\e[0m"
+echo -e "\e[1m\e[93mChecking/Installing Kali Linux...\e[0m"
+if ! proot-distro list | grep -q kali; then
+    echo -e "\e[1m\e[93mKali not installed, installing now...\e[0m"
+    proot-distro install kali
+else
+    echo -e "\e[1m\e[92mKali Linux already installed.\e[0m"
+fi
 
 # ------------------------------- #
 #     SETUP XFCE + DBUS FIX
 # ------------------------------- #
 
-echo -e "\e[1m\e[96mSetting up XFCE with DBUS fix...\e[0m"
+echo -e "\e[1m\e[96mSetting up XFCE Desktop with DBUS fix...\e[0m"
 
 proot-distro login kali -- bash -c "
 apt update -y
@@ -104,11 +107,21 @@ chmod +x /root/.vnc/xstartup
 
 cat > $PREFIX/bin/hco-kali << 'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
+
+# Check if Kali is installed
+if ! proot-distro list | grep -q kali; then
+    echo -e "\e[1m\e[93mKali not installed, installing now...\e[0m"
+    proot-distro install kali
+fi
+
 echo -e "\e[1m\e[96mStarting VNC Server on :1 ...\e[0m"
 bash $HOME/.vnc/start-kali.sh
+
 echo -e "\e[1m\e[92mOpen VNC Viewer → 127.0.0.1:1\e[0m"
 echo -e "\e[1m\e[93mUsername: root\e[0m"
 echo -e "\e[1m\e[93mPassword: kali\e[0m"
+
+# Login into Kali
 proot-distro login kali
 EOF
 
