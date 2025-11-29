@@ -33,7 +33,7 @@ Open Termux and run:
 ```bash
 pkg update -y && pkg upgrade -y
 pkg install wget -y
-wget https://YOUR_GITHUB_LINK/HCO-Kali-Termux.sh
+wget https://github.com/Hackerscolonyofficial/HCO-KALI-Termux.git
 bash HCO-Kali-Termux.sh
 
 ```
