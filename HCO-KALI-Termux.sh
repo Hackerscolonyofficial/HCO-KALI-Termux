@@ -1,51 +1,65 @@
 #!/data/data/com.termux/files/usr/bin/bash
 clear
 
-echo "🔥 HCO-Kali-Termux Installer"
+# --------------------------
+# Simple, monospace-safe banner
+# --------------------------
+echo "=============================================="
+echo "             HCO-KALI-TERMUX Installer        "
+echo "                Code by Azhar                 "
+echo "=============================================="
+echo ""
+
 sleep 1
 
-# Update packages
+# Check required file
+if [ ! -f "kali-profile.sh" ]; then
+  echo "❌ ERROR: Missing file 'kali-profile.sh' in this folder."
+  echo "Please place kali-profile.sh next to this installer and rerun."
+  exit 1
+fi
+
+echo "🔹 Updating packages..."
 pkg update -y && pkg upgrade -y
-pkg install wget curl proot-distro nano git tigervnc -y
 
-# Create profile directory
+echo "🔹 Installing dependencies..."
+pkg install wget curl git nano proot-distro tigervnc -y
+
+echo "🔹 Copying Kali profile..."
 mkdir -p $PREFIX/etc/proot-distro/
+cp kali-profile.sh $PREFIX/etc/proot-distro/kali.sh
 
-# Create custom Kali profile (Auto Fix)
-cat > $PREFIX/etc/proot-distro/kali.sh << 'EOF'
-DISTRO_NAME="Kali Linux (HCO Profile)"
-DISTRO_ARCH="aarch64"
-
-TARBALL_URL['aarch64']="https://kali.download/nethunter-images/current/rootfs/kalifs-arm64-full.tar.xz"
-TARBALL_SHA256['aarch64']="skip"
-
-EXTRACT_USING="tar"
-
-DISTRO_SETUP_COMMANDS=(
-  "apt update -y"
-  "apt upgrade -y"
-)
-EOF
-
-echo "✔ Kali profile created."
-
-echo "🔥 Installing Kali Linux..."
-sleep 1
+echo ""
+echo "🔹 Installing Kali Linux RootFS (this may take a while)..."
 proot-distro install kali
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "❌ Kali installation failed. Common fixes:"
+  echo "  • Ensure your internet connection is stable."
+  echo "  • Make sure the URL inside kali-profile.sh is reachable."
+  echo "  • Try: pkg update -y && pkg install proot-distro -y"
+  exit 1
+fi
 
-echo "✔ Installing Desktop + Tools inside Kali..."
-
-# Create setup script inside Kali
+echo ""
+echo "🔹 Setting up Kali Linux tools (inside Kali)..."
 cat > $PREFIX/var/lib/proot-distro/installed-rootfs/kali/root/kali-setup.sh << 'EOF'
 #!/bin/bash
+set -e
 
 apt update -y
 apt upgrade -y
 
+# Basic utilities
 apt install sudo git curl wget nano python3 python3-pip -y
-apt install xfce4 xfce4-terminal tightvncserver dbus-x11 -y
-apt install nmap hydra sqlmap metasploit-framework -y
 
+# Desktop and VNC
+apt install xfce4 xfce4-terminal tightvncserver dbus-x11 -y
+
+# Common pentest tools (installing some may take time)
+apt install nmap hydra sqlmap metasploit-framework -y || true
+
+# Setup VNC password (1234)
 mkdir -p ~/.vnc
 echo "1234" | vncpasswd -f > ~/.vnc/passwd
 chmod 600 ~/.vnc/passwd
@@ -55,33 +69,37 @@ EOF
 
 chmod +x $PREFIX/var/lib/proot-distro/installed-rootfs/kali/root/kali-setup.sh
 
-# Run inside Kali
+# Run setup inside Kali
 proot-distro login kali -- bash /root/kali-setup.sh
 
-# Create desktop start command
+echo ""
+echo "🔹 Creating desktop launcher script (kali-desktop)..."
 cat > $PREFIX/bin/kali-desktop << 'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 proot-distro login kali -- bash -c "vncserver -geometry 1280x720 -localhost no :1"
 echo ""
-echo "🔥 Kali Linux Desktop Running!"
-echo "Open VNC Viewer: 127.0.0.1:5901"
-echo "Password: 1234"
+echo "🔥 Kali Linux Desktop Started!"
+echo "➡ Open VNC Viewer → 127.0.0.1:5901"
+echo "➡ Password → 1234"
 EOF
-
 chmod +x $PREFIX/bin/kali-desktop
 
-# Create terminal shortcut
+echo "🔹 Creating terminal launcher (kali)..."
 cat > $PREFIX/bin/kali << 'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 proot-distro login kali
 EOF
-
 chmod +x $PREFIX/bin/kali
 
 echo ""
-echo "🎉 HCO-KALI-Termux Installed Successfully!"
-echo "----------------------------------------"
-echo "Kali Terminal      → kali"
-echo "Kali GUI Desktop   → kali-desktop"
-echo "VNC Password       → 1234"
-echo "----------------------------------------"
+echo "=============================================="
+echo "🎉 HCO-KALI-TERMUX Installed Successfully!"
+echo "----------------------------------------------"
+echo "• Start Kali Terminal : kali"
+echo "• Start Kali Desktop  : kali-desktop"
+echo "• VNC Viewer Address  : 127.0.0.1:5901"
+echo "• VNC Password        : 1234"
+echo "----------------------------------------------"
+echo "✔ Code by Azhar"
+echo "✔ \"Hackers don't break systems — they break limits.\""
+echo "=============================================="
