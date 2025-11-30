@@ -28,7 +28,7 @@
 ```bash
 pkg update -y
 pkg install git -y
-git clone https://github.com/Hackerscolonyofficial/HCO-KALI-Termux
+git clone https://github.com/Hackerscolonyofficial/HCO-KALI-Termux.git
 cd HCO-KALI-Termux
 bash HCO-KALI-Termux.sh
 ```
