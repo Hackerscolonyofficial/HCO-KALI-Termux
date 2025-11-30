@@ -8,34 +8,29 @@
 
 ---
 
-### 🔥 HCO-Kali-Termux  
-A powerful NO-ROOT Kali Linux environment for Android using Termux — comes with terminal + full GUI (XFCE Desktop) and all major hacking tools.
+<h1 align="center">🔥 HCO-KALI-Termux</h1>
+<p align="center">Run Full Kali Linux + XFCE Desktop on Android Without Root</p>
 
 ---
 
 ## 🚀 Features
-- Full Kali Linux rootfs in Termux (No Root)
-- XFCE Desktop via VNC
-- Auto VNC password: **1234**
-- Pre-installed tools:
-  - nmap
-  - hydra
-  - sqlmap
-  - metasploit-framework
-  - python3 + pip
-  - git, curl, wget, nano
-- Easy launch commands:
-- ---
+- ✔ Run Kali Linux without root  
+- ✔ XFCE4 Desktop Environment  
+- ✔ VNC GUI Access  
+- ✔ Preinstalled Hacking Tools  
+- ✔ Works on all Android devices  
+- ✔ Pure Termux based — No errors  
 
-## 📌 Installation
-Open Termux and run:
+---
+
+## 📥 Installation
 
 ```bash
-pkg update -y && pkg upgrade -y
-pkg install wget -y
-wget https://github.com/Hackerscolonyofficial/HCO-KALI-Termux.sh
-bash HCO-Kali-Termux.sh
-
+pkg update -y
+pkg install git -y
+git clone https://github.com/Hackerscolonyofficial/HCO-KALI-Termux
+cd HCO-KALI-Termux
+bash HCO-KALI-Termux.sh
 ```
 🎮 Usage
 Start Kali terminal:
@@ -49,13 +44,32 @@ kali-desktop
 
 VNC Details:
 
-Host: 127.0.0.1
-
-Port: 5901
+127.0.0.1:5901
 
 Password: 1234
 
 ---
+---
+
+---
+📌 Tools Included
+---
+Nmap
+---
+Hydra
+---
+SQLmap
+---
+Metasploit
+---
+Python3
+---
+Git
+---
+XFCE4
+---
+TightVNC Server
+----
 
 ⚠ Limitations (No Root)
 
