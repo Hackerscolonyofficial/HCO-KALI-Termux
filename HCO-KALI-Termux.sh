@@ -1,105 +1,131 @@
 #!/data/data/com.termux/files/usr/bin/bash
+# HCO-Kali-Termux
+# by Hackers Colony (Azhar)
+
 clear
 
-# --------------------------
-# Simple, monospace-safe banner
-# --------------------------
-echo "=============================================="
-echo "             HCO-KALI-TERMUX Installer        "
-echo "                Code by Azhar                 "
-echo "=============================================="
+YOUTUBE_LINK="https://youtube.com/@hackers_colony_tech?si=pvdCWZggTIuGb0ya"
+
+banner() {
+clear
+echo -e "\e[91m
+██╗  ██╗ ██████╗  ██████╗     ██╗  ██╗ █████╗ ██╗  ██╗███████╗██████╗ 
+██║  ██║██╔═══██╗██╔════╝     ██║  ██║██╔══██╗██║ ██╔╝██╔════╝██╔══██╗
+███████║██║   ██║██║  ███╗    ███████║███████║█████╔╝ █████╗  ██████╔╝
+██╔══██║██║   ██║██║   ██║    ██╔══██║██╔══██║██╔═██╗ ██╔══╝  ██╔══██╗
+██║  ██║╚██████╔╝╚██████╔╝    ██║  ██║██║  ██║██║  ██╗███████╗██║  ██║
+╚═╝  ╚═╝ ╚═════╝  ╚═════╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝
+\e[0m"
+echo -e "\e[92m       🚀 HCO-Kali-Termux | Kali Linux with GUI (XFCE)\e[0m"
 echo ""
+}
 
-sleep 1
+# ─────────────────────────────────────────────
+# 1. YOUTUBE REDIRECT + TOOL LOCK
+# ─────────────────────────────────────────────
+banner
+echo -e "\e[93mThis tool is NOT FREE.\e[0m"
+echo -e "\e[91mYou MUST subscribe to Hackers Colony Tech to continue.\e[0m"
+echo ""
+echo -e "\e[96mRedirecting to YouTube in 7 seconds...\e[0m"
+sleep 7
 
-# Check required file
-if [ ! -f "kali-profile.sh" ]; then
-  echo "❌ ERROR: Missing file 'kali-profile.sh' in this folder."
-  echo "Please place kali-profile.sh next to this installer and rerun."
-  exit 1
-fi
+termux-open-url "$YOUTUBE_LINK"
+sleep 2
 
-echo "🔹 Updating packages..."
+banner
+read -p $'\e[92mAfter Subscribing, press ENTER to continue… \e[0m' ok
+
+# ─────────────────────────────────────────────
+# 2. INSTALL DEPENDENCIES
+# ─────────────────────────────────────────────
+banner
+echo -e "\e[96m[+] Updating Termux packages...\e[0m"
 pkg update -y && pkg upgrade -y
 
-echo "🔹 Installing dependencies..."
-pkg install wget curl git nano proot-distro tigervnc -y
+echo -e "\e[96m[+] Installing required packages...\e[0m"
+pkg install -y proot-distro wget pulseaudio xfce4 tigervnc
 
-echo "🔹 Copying Kali profile..."
-mkdir -p $PREFIX/etc/proot-distro/
-cp kali-profile.sh $PREFIX/etc/proot-distro/kali.sh
-
-echo ""
-echo "🔹 Installing Kali Linux RootFS (this may take a while)..."
+# ─────────────────────────────────────────────
+# 3. INSTALL KALI LINUX (MINIMAL)
+# ─────────────────────────────────────────────
+banner
+echo -e "\e[96m[+] Installing Kali Linux (Minimal)...\e[0m"
 proot-distro install kali
-if [ $? -ne 0 ]; then
-  echo ""
-  echo "❌ Kali installation failed. Common fixes:"
-  echo "  • Ensure your internet connection is stable."
-  echo "  • Make sure the URL inside kali-profile.sh is reachable."
-  echo "  • Try: pkg update -y && pkg install proot-distro -y"
-  exit 1
-fi
 
-echo ""
-echo "🔹 Setting up Kali Linux tools (inside Kali)..."
-cat > $PREFIX/var/lib/proot-distro/installed-rootfs/kali/root/kali-setup.sh << 'EOF'
-#!/bin/bash
-set -e
+# ─────────────────────────────────────────────
+# 4. SETUP GUI + XFCE INSIDE KALI
+# ─────────────────────────────────────────────
+banner
+echo -e "\e[96m[+] Configuring XFCE GUI...\e[0m"
 
+proot-distro login kali -- bash -c "
 apt update -y
-apt upgrade -y
+apt install -y xfce4 xfce4-terminal dbus-x11 tigervnc-standalone-server
+"
 
-# Basic utilities
-apt install sudo git curl wget nano python3 python3-pip -y
+# ─────────────────────────────────────────────
+# 5. AUTO CONFIGURE VNC + FIX BLACK SCREEN
+# ─────────────────────────────────────────────
+banner
+echo -e "\e[96m[+] Setting up VNC server...\e[0m"
 
-# Desktop and VNC
-apt install xfce4 xfce4-terminal tightvncserver dbus-x11 -y
-
-# Common pentest tools (installing some may take time)
-apt install nmap hydra sqlmap metasploit-framework -y || true
-
-# Setup VNC password (1234)
-mkdir -p ~/.vnc
-echo "1234" | vncpasswd -f > ~/.vnc/passwd
-chmod 600 ~/.vnc/passwd
-
-echo "✔ Kali Setup Complete!"
+cat > ~/.vnc/xstartup <<EOF
+#!/bin/bash
+xrdb $HOME/.Xresources
+startxfce4 &
 EOF
+chmod +x ~/.vnc/xstartup
 
-chmod +x $PREFIX/var/lib/proot-distro/installed-rootfs/kali/root/kali-setup.sh
+# Black screen fix
+echo "unset SESSION_MANAGER" >> ~/.vnc/xstartup
+echo "unset DBUS_SESSION_BUS_ADDRESS" >> ~/.vnc/xstartup
 
-# Run setup inside Kali
-proot-distro login kali -- bash /root/kali-setup.sh
+# ─────────────────────────────────────────────
+# 6. CREATE LAUNCHER COMMANDS
+# ─────────────────────────────────────────────
 
-echo ""
-echo "🔹 Creating desktop launcher script (kali-desktop)..."
-cat > $PREFIX/bin/kali-desktop << 'EOF'
+cat > start-kali <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
-proot-distro login kali -- bash -c "vncserver -geometry 1280x720 -localhost no :1"
-echo ""
-echo "🔥 Kali Linux Desktop Started!"
-echo "➡ Open VNC Viewer → 127.0.0.1:5901"
-echo "➡ Password → 1234"
+pulseaudio --start --exit-idle-time=-1
+export PULSE_SERVER=127.0.0.1
+proot-distro login kali -- bash
 EOF
-chmod +x $PREFIX/bin/kali-desktop
+chmod +x start-kali
 
-echo "🔹 Creating terminal launcher (kali)..."
-cat > $PREFIX/bin/kali << 'EOF'
+cat > start-kali-gui <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
-proot-distro login kali
-EOF
-chmod +x $PREFIX/bin/kali
-
+export DISPLAY=:1
+vncserver -geometry 1280x720 :1
 echo ""
-echo "=============================================="
-echo "🎉 HCO-KALI-TERMUX Installed Successfully!"
-echo "----------------------------------------------"
-echo "• Start Kali Terminal : kali"
-echo "• Start Kali Desktop  : kali-desktop"
-echo "• VNC Viewer Address  : 127.0.0.1:5901"
-echo "• VNC Password        : 1234"
-echo "----------------------------------------------"
-echo "✔ Code by Azhar"
-echo "✔ \"Hackers don't break systems — they break limits.\""
-echo "=============================================="
+echo "🔥 GUI Started!"
+echo "👉 Open VNC Viewer"
+echo "👉 Address: 127.0.0.1:5901"
+echo "👉 Password: (your VNC password)"
+echo ""
+EOF
+chmod +x start-kali-gui
+
+cat > stop-kali-gui <<EOF
+#!/data/data/com.termux/files/usr/bin/bash
+vncserver -kill :1
+EOF
+chmod +x stop-kali-gui
+
+# ─────────────────────────────────────────────
+# 7. FINISHED
+# ─────────────────────────────────────────────
+
+banner
+echo -e "\e[92m🎉 Installation Complete!\e[0m"
+echo ""
+echo -e "\e[96mRun Kali Terminal:\e[0m"
+echo -e "\e[92m   ./start-kali\e[0m"
+echo ""
+echo -e "\e[96mRun Kali GUI (XFCE):\e[0m"
+echo -e "\e[92m   ./start-kali-gui\e[0m"
+echo ""
+echo -e "\e[96mStop GUI:\e[0m"
+echo -e "\e[92m   ./stop-kali-gui\e[0m"
+echo ""
+echo -e "\e[95m🔥 Enjoy full Kali Linux desktop in Termux!\e[0m"
